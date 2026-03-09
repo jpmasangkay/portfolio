@@ -34,9 +34,9 @@
 
     --radius: 0.25rem;
 
-    --pixel-shadow: 3px 3px 0px hsl(220 20% 6%);
-    --pixel-shadow-sm: 2px 2px 0px hsl(220 20% 6%);
-    --glow-primary: 0 0 20px hsl(38 70% 55% / 0.2);
+    --pixel-shadow: 3px 3px 0px hsl(220, 20%, 6%);
+    --pixel-shadow-sm: 2px 2px 0px hsl(220, 20%, 6%);
+    --glow-primary: 0 0 20px hsla(38, 70%, 55%, 0.2);
   }
 }
 
@@ -75,7 +75,7 @@
 
   .pixel-card:hover {
     transform: translate(-2px, -2px);
-    box-shadow: 5px 5px 0px hsl(220 20% 6%);
+    box-shadow: 5px 5px 0px hsl(220, 20%, 6%);
   }
 
   .section-heading {
@@ -104,7 +104,7 @@
     padding: 0.75rem 1.5rem;
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
-    border: 2px solid hsl(38 60% 40%);
+    border: 2px solid hsl(38, 60%, 40%);
     box-shadow: var(--pixel-shadow-sm);
     cursor: pointer;
     transition: all 0.1s ease;
@@ -114,12 +114,12 @@
 
   .pixel-btn:hover {
     transform: translate(-1px, -1px);
-    box-shadow: 3px 3px 0px hsl(220 20% 6%);
+    box-shadow: 3px 3px 0px hsl(220, 20%, 6%);
   }
 
   .pixel-btn:active {
     transform: translate(1px, 1px);
-    box-shadow: 1px 1px 0px hsl(220 20% 6%);
+    box-shadow: 1px 1px 0px hsl(220, 20%, 6%);
   }
 
   .nav-pixel {
