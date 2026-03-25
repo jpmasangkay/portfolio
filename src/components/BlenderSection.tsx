@@ -1,4 +1,4 @@
-import tavernImage from "@/assets/blender-tavern.jpg";
+import tavernImage from "@/assets/blender-tavern.png";
 import ParallaxSection from "./ParallaxSection";
 
 const BlenderSection = () => {

@@ -5,36 +5,73 @@ import ProjectGrid from "@/components/ProjectGrid";
 import BlenderSection from "@/components/BlenderSection";
 import Footer from "@/components/Footer";
 
-import websiteImg from "@/assets/website-1.jpg";
-import gameImg from "@/assets/game-1.jpg";
-import appImg from "@/assets/app-1.jpg";
-import designImg from "@/assets/design-1.jpg";
-
-const websites = [
-  { title: "Project Website 1", description: "A responsive web application built with modern technologies.", image: websiteImg, tags: ["React", "Tailwind"] },
-  { title: "Project Website 2", description: "An interactive platform with dynamic content management.", image: websiteImg, tags: ["TypeScript", "API"] },
-  { title: "Project Website 3", description: "E-commerce solution with seamless user experience.", image: websiteImg, tags: ["Fullstack", "DB"] },
-  { title: "Project Website 4", description: "Portfolio and showcase website with custom animations.", image: websiteImg, tags: ["CSS", "Animation"] },
-];
-
-const games = [
-  { title: "Dungeon Quest", description: "A top-down RPG dungeon crawler with procedural generation.", image: gameImg, tags: ["Unity", "C#"] },
-  { title: "Pixel Runner", description: "A fast-paced endless runner with pixel art visuals.", image: gameImg, tags: ["Godot", "GDScript"] },
-];
-
-const apps = [
-  { title: "Task Manager App", description: "A productivity app with intuitive task organization.", image: appImg, tags: ["Mobile", "Flutter"] },
-  { title: "Weather Tracker", description: "Real-time weather tracking with beautiful visualizations.", image: appImg, tags: ["API", "React Native"] },
-  { title: "Fitness Companion", description: "Workout tracking and health monitoring application.", image: appImg, tags: ["Mobile", "Firebase"] },
-];
-
-const designs = [
-  { title: "Fantasy Landscape", description: "A vast fantasy landscape with aurora and mountains.", image: designImg, tags: ["Photoshop", "Digital Art"] },
-  { title: "Character Design", description: "Original character concept with detailed shading.", image: designImg, tags: ["Photoshop", "Concept"] },
-  { title: "UI Mockup", description: "Modern app interface design with dark theme.", image: designImg, tags: ["Photoshop", "UI/UX"] },
-  { title: "Poster Design", description: "Event poster with retro-futuristic aesthetics.", image: designImg, tags: ["Photoshop", "Print"] },
-  { title: "Logo Collection", description: "Brand identity designs with pixel art influence.", image: designImg, tags: ["Photoshop", "Branding"] },
-  { title: "Photo Manipulation", description: "Surreal composite photography artwork.", image: designImg, tags: ["Photoshop", "Composite"] },
+const repos = [
+  {
+    title: "grimoire",
+    description: "Public repo (TypeScript). Updated Mar 24, 2026.",
+    href: "https://github.com/jpmasangkay/grimoire",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "umbra",
+    description: "weather-dashboard (TypeScript). Updated Mar 23, 2026.",
+    href: "https://github.com/jpmasangkay/umbra",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "scilab-360",
+    description: "Public repo (TypeScript). Updated Mar 23, 2026.",
+    href: "https://github.com/jpmasangkay/scilab-360",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "atlus-website-imitation",
+    description: "Public repo (HTML). Updated Mar 14, 2026.",
+    href: "https://github.com/jpmasangkay/atlus-website-imitation",
+    tags: ["HTML"],
+  },
+  {
+    title: "marginalia",
+    description: "Public repo (TypeScript). Updated Mar 13, 2026.",
+    href: "https://github.com/jpmasangkay/marginalia",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "simple-employee-details",
+    description: "Public repo (Blade). Updated Mar 9, 2026.",
+    href: "https://github.com/jpmasangkay/simple-employee-details",
+    tags: ["Blade"],
+  },
+  {
+    title: "Flappy-Bird",
+    description: "Public repo (ASP.NET). Updated Mar 4, 2026.",
+    href: "https://github.com/jpmasangkay/Flappy-Bird",
+    tags: ["ASP.NET"],
+  },
+  {
+    title: "app-calculator",
+    description: "Public repo (Kotlin). Updated Feb 28, 2026.",
+    href: "https://github.com/jpmasangkay/app-calculator",
+    tags: ["Kotlin"],
+  },
+  {
+    title: "germ-shooter",
+    description: "Public repo (C#). Updated Feb 28, 2026.",
+    href: "https://github.com/jpmasangkay/germ-shooter",
+    tags: ["C#"],
+  },
+  {
+    title: "dark-horizon",
+    description: "Public repo (Java). Updated Feb 28, 2026.",
+    href: "https://github.com/jpmasangkay/dark-horizon",
+    tags: ["Java"],
+  },
+  {
+    title: "valentines-day-2026",
+    description: "Public repo (TypeScript). Updated Feb 14, 2026.",
+    href: "https://github.com/jpmasangkay/valentines-day-2026",
+    tags: ["TypeScript"],
+  },
 ];
 
 const Index = () => {
@@ -45,13 +82,7 @@ const Index = () => {
       <hr className="pixel-divider max-w-5xl mx-auto" />
       <AboutSection />
       <hr className="pixel-divider max-w-5xl mx-auto" />
-      <ProjectGrid id="websites" heading="// Websites" projects={websites} columns={2} />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <ProjectGrid id="games" heading="// Games" projects={games} columns={2} />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <ProjectGrid id="apps" heading="// Apps" projects={apps} columns={3} />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <ProjectGrid id="designs" heading="// Photoshop Designs" projects={designs} columns={3} />
+      <ProjectGrid id="repos" heading="// Repositories" projects={repos} columns={3} />
       <hr className="pixel-divider max-w-5xl mx-auto" />
       <BlenderSection />
       <Footer />

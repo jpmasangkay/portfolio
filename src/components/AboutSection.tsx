@@ -1,22 +1,30 @@
-import { User, GraduationCap, Award, BookOpen } from "lucide-react";
+import { Briefcase, Code, GraduationCap, MapPin, User, Award } from "lucide-react";
 import ParallaxSection from "./ParallaxSection";
 
 const stats = [
-  { icon: User, label: "Name", value: "[Your Name]" },
-  { icon: User, label: "Age", value: "[Your Age]" },
-  { icon: GraduationCap, label: "Education", value: "[Your Degree / School]" },
+  { icon: User, label: "Name", value: "Shealtiel John Paul A. Masangkay" },
+  { icon: Briefcase, label: "Target", value: "OJT — Software/Web Development" },
+  { icon: GraduationCap, label: "Education", value: "BS Computer Science — Sacred Heart College of Lucena City, Inc. (2023–Present)" },
+  { icon: MapPin, label: "Location", value: "Lucena City, Philippines" },
 ];
 
-const seminars = [
-  "Seminar Title 1",
-  "Seminar Title 2",
-  "Seminar Title 3",
+const experience = [
+  "Junior Web Developer (Part-time) — Leon Guinto Memorial College, Inc. (Jan 2026–Present)",
+  "Built student information system features in PHP and MySQL (Hostinger).",
+  "Implemented multi-copy PDF export using TCPDF for registrar/accounting/student records.",
+  "Refactored the student dashboard UI and co-developed role-based registrar interfaces (admin, clerk, superadmin).",
 ];
 
-const achievements = [
-  "Achievement 1",
-  "Achievement 2",
-  "Achievement 3",
+const skills = [
+  "Intermediate: TypeScript, React, C++, Git",
+  "Beginner: PHP, Laravel, Java, MERN, SQL, Unity/C#, Kotlin, Flutter",
+  "Tools: Blender, Photoshop, VS Code, Android Studio",
+];
+
+const certificates = [
+  "Gemini Certified — Google (2026)",
+  "Hour of Code (Minecraft) — Microsoft (2026)",
+  "Trademark Awareness Session — Ateneo (2026)",
 ];
 
 const AboutSection = () => {
@@ -27,7 +35,13 @@ const AboutSection = () => {
           <h2 className="section-heading mb-12">// Character Stats</h2>
         </ParallaxSection>
 
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
+        <ParallaxSection delay={0}>
+          <p className="font-body text-muted-foreground mb-10">
+            Computer Science student seeking an OJT placement in software or web development.
+          </p>
+        </ParallaxSection>
+
+        <div className="grid md:grid-cols-4 gap-6 mb-12">
           {stats.map((stat, i) => (
             <ParallaxSection key={stat.label} delay={i * 100}>
               <div className="pixel-card p-6 h-full">
@@ -39,16 +53,16 @@ const AboutSection = () => {
           ))}
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           <ParallaxSection delay={0}>
             <div className="pixel-card p-6 h-full">
-              <BookOpen size={20} className="text-accent mb-3" />
-              <p className="stat-pixel mb-4">Seminars</p>
+              <Briefcase size={20} className="text-accent mb-3" />
+              <p className="stat-pixel mb-4">Experience</p>
               <ul className="space-y-2">
-                {seminars.map((s, i) => (
+                {experience.map((item, i) => (
                   <li key={i} className="font-body text-muted-foreground flex items-start gap-2">
                     <span className="text-primary font-pixel text-[8px] mt-1.5">►</span>
-                    {s}
+                    {item}
                   </li>
                 ))}
               </ul>
@@ -57,13 +71,28 @@ const AboutSection = () => {
 
           <ParallaxSection delay={150}>
             <div className="pixel-card p-6 h-full">
-              <Award size={20} className="text-primary mb-3" />
-              <p className="stat-pixel mb-4">Achievements</p>
+              <Code size={20} className="text-primary mb-3" />
+              <p className="stat-pixel mb-4">Skills</p>
               <ul className="space-y-2">
-                {achievements.map((a, i) => (
+                {skills.map((item, i) => (
                   <li key={i} className="font-body text-muted-foreground flex items-start gap-2">
                     <span className="text-primary font-pixel text-[8px] mt-1.5">★</span>
-                    {a}
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </ParallaxSection>
+
+          <ParallaxSection delay={300}>
+            <div className="pixel-card p-6 h-full">
+              <Award size={20} className="text-accent mb-3" />
+              <p className="stat-pixel mb-4">Certificates</p>
+              <ul className="space-y-2">
+                {certificates.map((item, i) => (
+                  <li key={i} className="font-body text-muted-foreground flex items-start gap-2">
+                    <span className="text-primary font-pixel text-[8px] mt-1.5">✦</span>
+                    {item}
                   </li>
                 ))}
               </ul>

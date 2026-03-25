@@ -23,7 +23,7 @@ const HeroSection = () => {
       >
         <p className="stat-pixel mb-4 tracking-widest">WELCOME TO MY WORLD</p>
         <h1 className="font-pixel text-2xl md:text-4xl text-foreground leading-relaxed mb-6">
-          [Your Name]
+          Shealtiel John Paul A. Masangkay
         </h1>
         <p className="font-body text-lg text-muted-foreground max-w-xl mx-auto mb-8 leading-relaxed">
           Developer · Designer · Creator
