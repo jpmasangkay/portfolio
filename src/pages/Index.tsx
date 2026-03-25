@@ -3,6 +3,7 @@ import HeroSection from "@/components/HeroSection";
 import AboutSection from "@/components/AboutSection";
 import ProjectGrid from "@/components/ProjectGrid";
 import BlenderSection from "@/components/BlenderSection";
+import PhotoshopSection from "@/components/PhotoshopSection";
 import Footer from "@/components/Footer";
 
 const repos = [
@@ -44,9 +45,9 @@ const repos = [
   },
   {
     title: "Flappy-Bird",
-    description: "Public repo (ASP.NET). Updated Mar 4, 2026.",
+    description: "Public repo (C#). Updated Mar 4, 2026.",
     href: "https://github.com/jpmasangkay/Flappy-Bird",
-    tags: ["ASP.NET"],
+    tags: ["C#"],
   },
   {
     title: "app-calculator",
@@ -83,6 +84,8 @@ const Index = () => {
       <AboutSection />
       <hr className="pixel-divider max-w-5xl mx-auto" />
       <ProjectGrid id="repos" heading="// Repositories" projects={repos} columns={3} />
+      <hr className="pixel-divider max-w-5xl mx-auto" />
+      <PhotoshopSection />
       <hr className="pixel-divider max-w-5xl mx-auto" />
       <BlenderSection />
       <Footer />
