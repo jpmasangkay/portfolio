@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
 
 interface TownOverlayProps {
@@ -7,29 +8,105 @@ interface TownOverlayProps {
   onMobileInteract?: () => void;
 }
 
+const BUILDING_GUIDE = [
+  { emoji: "🏰", name: "Gate", desc: "Welcome", color: "#ffdd44" },
+  { emoji: "🍺", name: "Tavern", desc: "About Me", color: "#ff8833" },
+  { emoji: "📜", name: "Quest Board", desc: "Repos", color: "#44ddff" },
+  { emoji: "🧙", name: "Tower", desc: "Skills", color: "#aa66ff" },
+  { emoji: "🎨", name: "Gallery", desc: "Artwork", color: "#ff66aa" },
+  { emoji: "⚒️", name: "Forge", desc: "3D Work", color: "#ff4422" },
+  { emoji: "🏆", name: "Notice", desc: "Certs", color: "#44ff66" },
+  { emoji: "🕊️", name: "Exit", desc: "Contact", color: "#ffffff" },
+];
+
 const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }: TownOverlayProps) => {
+  const [guideOpen, setGuideOpen] = useState(false);
+  const activeDirRef = useRef<{ dx: number; dz: number }>({ dx: 0, dz: 0 });
+  const intervalRef = useRef<number | null>(null);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
   if (modalOpen) return null;
 
-  // Mobile d-pad handlers
-  const handleDPad = (dx: number, dz: number) => {
+  // Start continuous movement in a direction
+  const startMove = useCallback((dx: number, dz: number) => {
+    activeDirRef.current = { dx, dz };
     if (onMobileMove) onMobileMove(dx, dz);
-  };
+  }, [onMobileMove]);
 
-  const dpadBtnStyle = (active?: boolean): React.CSSProperties => ({
-    width: 48,
-    height: 48,
+  // Stop movement
+  const stopMove = useCallback(() => {
+    activeDirRef.current = { dx: 0, dz: 0 };
+    if (onMobileMove) onMobileMove(0, 0);
+  }, [onMobileMove]);
+
+  // Touch handlers that properly prevent default and handle edge cases
+  const makeTouchHandlers = (dx: number, dz: number) => ({
+    onTouchStart: (e: React.TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startMove(dx, dz);
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      // Prevent scrolling/gesture interference while holding d-pad
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stopMove();
+    },
+    onTouchCancel: (e: React.TouchEvent) => {
+      e.preventDefault();
+      stopMove();
+    },
+    // Mouse fallback for desktop testing
+    onMouseDown: (e: React.MouseEvent) => {
+      e.preventDefault();
+      startMove(dx, dz);
+    },
+    onMouseUp: (e: React.MouseEvent) => {
+      e.preventDefault();
+      stopMove();
+    },
+    onMouseLeave: () => {
+      // If dragging off the button, stop
+      if (activeDirRef.current.dx === dx && activeDirRef.current.dz === dz) {
+        stopMove();
+      }
+    },
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+    },
+  });
+
+  const dpadBtnStyle = (): React.CSSProperties => ({
+    width: 54,
+    height: 54,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: active ? "hsla(38, 85%, 55%, 0.3)" : "hsla(255, 20%, 10%, 0.7)",
+    background: "hsla(255, 20%, 10%, 0.7)",
     border: "2px solid hsla(38, 85%, 55%, 0.4)",
     color: "hsl(38, 85%, 55%)",
     fontFamily: "'Press Start 2P', cursive",
-    fontSize: "14px",
+    fontSize: "16px",
     cursor: "pointer",
     pointerEvents: "auto" as const,
     touchAction: "none" as const,
     userSelect: "none" as const,
+    WebkitUserSelect: "none" as const,
+    WebkitTouchCallout: "none" as const,
+    borderRadius: 4,
+    outline: "none",
   });
 
   return (
@@ -144,7 +221,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         </div>
       </div>
 
-      {/* Building Legend Guide (bigger) - hidden on mobile */}
+      {/* Building Legend Guide (desktop) */}
       <div
         className="hide-mobile"
         style={{
@@ -174,16 +251,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           >
             🗺️ BUILDING GUIDE
           </p>
-          {[
-            { emoji: "🏰", name: "Gate", desc: "Welcome", color: "#ffdd44" },
-            { emoji: "🍺", name: "Tavern", desc: "About Me", color: "#ff8833" },
-            { emoji: "📜", name: "Quest Board", desc: "Repos", color: "#44ddff" },
-            { emoji: "🧙", name: "Tower", desc: "Skills", color: "#aa66ff" },
-            { emoji: "🎨", name: "Gallery", desc: "Artwork", color: "#ff66aa" },
-            { emoji: "⚒️", name: "Forge", desc: "3D Work", color: "#ff4422" },
-            { emoji: "🏆", name: "Notice", desc: "Certs", color: "#44ff66" },
-            { emoji: "🕊️", name: "Exit", desc: "Contact", color: "#ffffff" },
-          ].map((item, i) => (
+          {BUILDING_GUIDE.map((item, i) => (
             <div
               key={i}
               style={{
@@ -219,49 +287,146 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         </div>
       </div>
 
-      {/* Mobile Touch Controls */}
+      {/* ========== MOBILE: Building Guide (collapsible) ========== */}
       <div
         className="show-mobile"
         style={{
           position: "absolute",
-          bottom: 20,
-          left: 20,
+          top: 42,
+          right: 8,
           pointerEvents: "auto",
+          zIndex: 20,
         }}
       >
-        {/* D-Pad */}
-        <div style={{ display: "grid", gridTemplateColumns: "48px 48px 48px", gridTemplateRows: "48px 48px 48px", gap: 2 }}>
+        {/* Toggle button */}
+        <button
+          onClick={() => setGuideOpen(!guideOpen)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            background: guideOpen ? "hsla(38, 85%, 55%, 0.2)" : "hsla(255, 20%, 10%, 0.8)",
+            border: guideOpen ? "2px solid hsl(38, 85%, 55%)" : "2px solid hsla(250, 15%, 25%, 0.6)",
+            padding: "6px 10px",
+            fontFamily: "'Press Start 2P', cursive",
+            fontSize: "7px",
+            color: guideOpen ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 60%)",
+            cursor: "pointer",
+            borderRadius: 2,
+            touchAction: "manipulation",
+            transition: "all 0.2s ease",
+            boxShadow: guideOpen ? "0 0 10px hsla(38, 85%, 55%, 0.3)" : "none",
+          }}
+        >
+          🗺️ {guideOpen ? "✕" : "MAP"}
+        </button>
+
+        {/* Expanded guide */}
+        {guideOpen && (
+          <div
+            style={{
+              marginTop: 4,
+              background: "hsla(255, 20%, 7%, 0.94)",
+              border: "2px solid hsla(250, 15%, 25%, 0.6)",
+              padding: "10px 12px",
+              borderRadius: 2,
+              boxShadow: "0 0 15px rgba(0,0,0,0.6)",
+              animation: "fadeInGuide 0.2s ease-out",
+            }}
+          >
+            <p
+              style={{
+                fontFamily: "'Press Start 2P', cursive",
+                fontSize: "6px",
+                color: "hsl(38, 85%, 55%)",
+                marginBottom: 8,
+                letterSpacing: "0.1em",
+                textShadow: "0 0 8px hsla(38, 85%, 55%, 0.3)",
+              }}
+            >
+              BUILDING GUIDE
+            </p>
+            {BUILDING_GUIDE.map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 4,
+                }}
+              >
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: item.color,
+                    boxShadow: `0 0 4px ${item.color}`,
+                    flexShrink: 0,
+                  }}
+                />
+                <p
+                  style={{
+                    fontFamily: "'Press Start 2P', cursive",
+                    fontSize: "5px",
+                    color: "hsl(250, 10%, 65%)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {item.emoji} {item.name}{" "}
+                  <span style={{ color: "hsl(250, 10%, 42%)" }}>— {item.desc}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ========== MOBILE: D-Pad Touch Controls ========== */}
+      <div
+        className="show-mobile"
+        id="mobile-dpad"
+        style={{
+          position: "absolute",
+          bottom: 24,
+          left: 16,
+          pointerEvents: "auto",
+          touchAction: "none",
+          zIndex: 20,
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "54px 54px 54px",
+            gridTemplateRows: "54px 54px 54px",
+            gap: 3,
+          }}
+        >
           <div />
           <button
             style={dpadBtnStyle()}
-            onTouchStart={(e) => { e.preventDefault(); handleDPad(0, -1); }}
-            onTouchEnd={(e) => { e.preventDefault(); handleDPad(0, 0); }}
-            onMouseDown={() => handleDPad(0, -1)}
-            onMouseUp={() => handleDPad(0, 0)}
+            {...makeTouchHandlers(0, -1)}
           >▲</button>
           <div />
           <button
             style={dpadBtnStyle()}
-            onTouchStart={(e) => { e.preventDefault(); handleDPad(-1, 0); }}
-            onTouchEnd={(e) => { e.preventDefault(); handleDPad(0, 0); }}
-            onMouseDown={() => handleDPad(-1, 0)}
-            onMouseUp={() => handleDPad(0, 0)}
+            {...makeTouchHandlers(-1, 0)}
           >◀</button>
-          <div style={{ ...dpadBtnStyle(), background: "hsla(255, 20%, 10%, 0.3)", border: "1px solid hsla(250, 15%, 25%, 0.3)" }} />
+          <div style={{
+            ...dpadBtnStyle(),
+            background: "hsla(255, 20%, 10%, 0.3)",
+            border: "1px solid hsla(250, 15%, 25%, 0.3)",
+          }} />
           <button
             style={dpadBtnStyle()}
-            onTouchStart={(e) => { e.preventDefault(); handleDPad(1, 0); }}
-            onTouchEnd={(e) => { e.preventDefault(); handleDPad(0, 0); }}
-            onMouseDown={() => handleDPad(1, 0)}
-            onMouseUp={() => handleDPad(0, 0)}
+            {...makeTouchHandlers(1, 0)}
           >▶</button>
           <div />
           <button
             style={dpadBtnStyle()}
-            onTouchStart={(e) => { e.preventDefault(); handleDPad(0, 1); }}
-            onTouchEnd={(e) => { e.preventDefault(); handleDPad(0, 0); }}
-            onMouseDown={() => handleDPad(0, 1)}
-            onMouseUp={() => handleDPad(0, 0)}
+            {...makeTouchHandlers(0, 1)}
           >▼</button>
           <div />
         </div>
@@ -272,16 +437,23 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         className="show-mobile"
         style={{
           position: "absolute",
-          bottom: 30,
-          right: "clamp(12px, 2vw, 16px)",
+          bottom: 40,
+          right: 16,
           pointerEvents: "auto",
+          touchAction: "none",
+          zIndex: 20,
         }}
       >
         <button
+          onTouchStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onMobileInteract?.();
+          }}
           onClick={() => onMobileInteract?.()}
           style={{
-            width: 64,
-            height: 64,
+            width: 68,
+            height: 68,
             borderRadius: "50%",
             display: "flex",
             alignItems: "center",
@@ -294,13 +466,16 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
               : "2px solid hsla(250, 15%, 25%, 0.5)",
             color: nearBuilding ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 45%)",
             fontFamily: "'Press Start 2P', cursive",
-            fontSize: "18px",
+            fontSize: "20px",
             cursor: "pointer",
             touchAction: "none",
+            userSelect: "none",
+            WebkitUserSelect: "none",
             boxShadow: nearBuilding
               ? "0 0 15px hsla(38, 85%, 55%, 0.4)"
               : "none",
             transition: "all 0.2s ease",
+            outline: "none",
           }}
         >
           ⚔️
@@ -313,11 +488,24 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           from { opacity: 0; transform: translateX(-50%) translateY(10px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
+        @keyframes fadeInGuide {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .show-mobile { display: none !important; }
         .hide-mobile { display: block; }
         @media (max-width: 768px), (pointer: coarse) {
           .show-mobile { display: flex !important; }
           .hide-mobile { display: none !important; }
+        }
+        /* Ensure d-pad buttons don't get highlight on tap */
+        #mobile-dpad button {
+          -webkit-tap-highlight-color: transparent;
+          -webkit-touch-callout: none;
+        }
+        #mobile-dpad button:active {
+          background: hsla(38, 85%, 55%, 0.3) !important;
+          border-color: hsl(38, 85%, 55%) !important;
         }
       `}</style>
     </div>
