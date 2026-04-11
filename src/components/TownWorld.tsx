@@ -53,7 +53,7 @@ const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
 const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const playerPosRef = useRef(new THREE.Vector3(0, 0, 16));
+  const playerPosRef = useRef(new THREE.Vector3(0, 0, 16.5));
   const nearBuildingRef = useRef<BuildingDef | null>(null);
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen);
