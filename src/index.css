@@ -122,4 +122,10 @@
     -webkit-user-select: none !important;
     user-select: none !important;
   }
+
+  /* Prevent interaction prompt from overlapping D-pad area */
+  #interaction-prompt {
+    bottom: 220px !important;
+  }
 }
+

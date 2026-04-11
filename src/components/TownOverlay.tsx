@@ -84,9 +84,9 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
       {/* Interaction prompt */}
       {nearBuilding && (
         <div
+          id="interaction-prompt"
           style={{
             position: "absolute",
-            bottom: "clamp(100px, 20vh, 160px)",
             left: "50%",
             transform: "translateX(-50%)",
             textAlign: "center",
@@ -425,7 +425,6 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
             ▶
           </button>
           <div />
-          
           <div />
           <button
             onPointerDown={(e) => {
