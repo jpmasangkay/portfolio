@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
 
 interface TownOverlayProps {
@@ -21,93 +21,132 @@ const BUILDING_GUIDE = [
 
 const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
-  const activeDirRef = useRef<{ dx: number; dz: number }>({ dx: 0, dz: 0 });
-  const intervalRef = useRef<number | null>(null);
 
-  // Cleanup interval on unmount
+  // Refs for D-pad buttons — we attach native DOM listeners to these
+  const btnUpRef = useRef<HTMLButtonElement>(null);
+  const btnDownRef = useRef<HTMLButtonElement>(null);
+  const btnLeftRef = useRef<HTMLButtonElement>(null);
+  const btnRightRef = useRef<HTMLButtonElement>(null);
+  const interactBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Keep callbacks in refs so native listeners always use latest
+  const onMobileMoveRef = useRef(onMobileMove);
+  const onMobileInteractRef = useRef(onMobileInteract);
   useEffect(() => {
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+    onMobileMoveRef.current = onMobileMove;
+    onMobileInteractRef.current = onMobileInteract;
+  }, [onMobileMove, onMobileInteract]);
+
+  // Attach native touch/pointer listeners to D-pad buttons
+  useEffect(() => {
+    const buttons = [
+      { ref: btnUpRef, dx: 0, dz: -1 },
+      { ref: btnDownRef, dx: 0, dz: 1 },
+      { ref: btnLeftRef, dx: -1, dz: 0 },
+      { ref: btnRightRef, dx: 1, dz: 0 },
+    ];
+
+    const cleanups: (() => void)[] = [];
+
+    buttons.forEach(({ ref, dx, dz }) => {
+      const el = ref.current;
+      if (!el) return;
+
+      const onStart = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onMobileMoveRef.current?.(dx, dz);
+      };
+
+      const onEnd = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onMobileMoveRef.current?.(0, 0);
+      };
+
+      const onMove = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      const onContext = (e: Event) => e.preventDefault();
+
+      // Use { passive: false } to allow preventDefault on touch events
+      el.addEventListener("touchstart", onStart, { passive: false });
+      el.addEventListener("touchend", onEnd, { passive: false });
+      el.addEventListener("touchcancel", onEnd, { passive: false });
+      el.addEventListener("touchmove", onMove, { passive: false });
+      el.addEventListener("mousedown", onStart);
+      el.addEventListener("mouseup", onEnd);
+      el.addEventListener("mouseleave", onEnd);
+      el.addEventListener("contextmenu", onContext);
+
+      // Also add pointer events as additional fallback
+      el.addEventListener("pointerdown", onStart);
+      el.addEventListener("pointerup", onEnd);
+      el.addEventListener("pointercancel", onEnd);
+
+      cleanups.push(() => {
+        el.removeEventListener("touchstart", onStart);
+        el.removeEventListener("touchend", onEnd);
+        el.removeEventListener("touchcancel", onEnd);
+        el.removeEventListener("touchmove", onMove);
+        el.removeEventListener("mousedown", onStart);
+        el.removeEventListener("mouseup", onEnd);
+        el.removeEventListener("mouseleave", onEnd);
+        el.removeEventListener("contextmenu", onContext);
+        el.removeEventListener("pointerdown", onStart);
+        el.removeEventListener("pointerup", onEnd);
+        el.removeEventListener("pointercancel", onEnd);
+      });
+    });
+
+    // Interact button
+    const interactEl = interactBtnRef.current;
+    if (interactEl) {
+      const onInteract = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onMobileInteractRef.current?.();
+      };
+      const onContext = (e: Event) => e.preventDefault();
+
+      interactEl.addEventListener("touchstart", onInteract, { passive: false });
+      interactEl.addEventListener("click", onInteract);
+      interactEl.addEventListener("contextmenu", onContext);
+
+      cleanups.push(() => {
+        interactEl.removeEventListener("touchstart", onInteract);
+        interactEl.removeEventListener("click", onInteract);
+        interactEl.removeEventListener("contextmenu", onContext);
+      });
+    }
+
+    return () => cleanups.forEach(fn => fn());
+  }, [modalOpen]); // Re-attach when modalOpen changes since we return null when open
 
   if (modalOpen) return null;
 
-  // Start continuous movement in a direction
-  const startMove = useCallback((dx: number, dz: number) => {
-    activeDirRef.current = { dx, dz };
-    if (onMobileMove) onMobileMove(dx, dz);
-  }, [onMobileMove]);
-
-  // Stop movement
-  const stopMove = useCallback(() => {
-    activeDirRef.current = { dx: 0, dz: 0 };
-    if (onMobileMove) onMobileMove(0, 0);
-  }, [onMobileMove]);
-
-  // Touch handlers that properly prevent default and handle edge cases
-  const makeTouchHandlers = (dx: number, dz: number) => ({
-    onTouchStart: (e: React.TouchEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      startMove(dx, dz);
-    },
-    onTouchMove: (e: React.TouchEvent) => {
-      // Prevent scrolling/gesture interference while holding d-pad
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    onTouchEnd: (e: React.TouchEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      stopMove();
-    },
-    onTouchCancel: (e: React.TouchEvent) => {
-      e.preventDefault();
-      stopMove();
-    },
-    // Mouse fallback for desktop testing
-    onMouseDown: (e: React.MouseEvent) => {
-      e.preventDefault();
-      startMove(dx, dz);
-    },
-    onMouseUp: (e: React.MouseEvent) => {
-      e.preventDefault();
-      stopMove();
-    },
-    onMouseLeave: () => {
-      // If dragging off the button, stop
-      if (activeDirRef.current.dx === dx && activeDirRef.current.dz === dz) {
-        stopMove();
-      }
-    },
-    onContextMenu: (e: React.MouseEvent) => {
-      e.preventDefault();
-    },
-  });
-
-  const dpadBtnStyle = (): React.CSSProperties => ({
-    width: 54,
-    height: 54,
+  const dpadBtnStyle: React.CSSProperties = {
+    width: 56,
+    height: 56,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "hsla(255, 20%, 10%, 0.7)",
+    background: "hsla(255, 20%, 10%, 0.75)",
     border: "2px solid hsla(38, 85%, 55%, 0.4)",
     color: "hsl(38, 85%, 55%)",
     fontFamily: "'Press Start 2P', cursive",
     fontSize: "16px",
     cursor: "pointer",
-    pointerEvents: "auto" as const,
-    touchAction: "none" as const,
-    userSelect: "none" as const,
-    WebkitUserSelect: "none" as const,
-    WebkitTouchCallout: "none" as const,
+    pointerEvents: "auto",
+    touchAction: "none",
+    userSelect: "none",
+    WebkitUserSelect: "none",
     borderRadius: 4,
     outline: "none",
-  });
+    padding: 0,
+  };
 
   return (
     <div
@@ -298,7 +337,6 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           zIndex: 20,
         }}
       >
-        {/* Toggle button */}
         <button
           onClick={() => setGuideOpen(!guideOpen)}
           style={{
@@ -321,7 +359,6 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           🗺️ {guideOpen ? "✕" : "MAP"}
         </button>
 
-        {/* Expanded guide */}
         {guideOpen && (
           <div
             style={{
@@ -383,7 +420,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         )}
       </div>
 
-      {/* ========== MOBILE: D-Pad Touch Controls ========== */}
+      {/* ========== MOBILE: D-Pad (native DOM listeners) ========== */}
       <div
         className="show-mobile"
         id="mobile-dpad"
@@ -399,35 +436,24 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "54px 54px 54px",
-            gridTemplateRows: "54px 54px 54px",
+            gridTemplateColumns: "56px 56px 56px",
+            gridTemplateRows: "56px 56px 56px",
             gap: 3,
           }}
         >
           <div />
-          <button
-            style={dpadBtnStyle()}
-            {...makeTouchHandlers(0, -1)}
-          >▲</button>
+          <button ref={btnUpRef} style={dpadBtnStyle}>▲</button>
           <div />
-          <button
-            style={dpadBtnStyle()}
-            {...makeTouchHandlers(-1, 0)}
-          >◀</button>
+          <button ref={btnLeftRef} style={dpadBtnStyle}>◀</button>
           <div style={{
-            ...dpadBtnStyle(),
+            ...dpadBtnStyle,
             background: "hsla(255, 20%, 10%, 0.3)",
             border: "1px solid hsla(250, 15%, 25%, 0.3)",
+            cursor: "default",
           }} />
-          <button
-            style={dpadBtnStyle()}
-            {...makeTouchHandlers(1, 0)}
-          >▶</button>
+          <button ref={btnRightRef} style={dpadBtnStyle}>▶</button>
           <div />
-          <button
-            style={dpadBtnStyle()}
-            {...makeTouchHandlers(0, 1)}
-          >▼</button>
+          <button ref={btnDownRef} style={dpadBtnStyle}>▼</button>
           <div />
         </div>
       </div>
@@ -445,12 +471,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         }}
       >
         <button
-          onTouchStart={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onMobileInteract?.();
-          }}
-          onClick={() => onMobileInteract?.()}
+          ref={interactBtnRef}
           style={{
             width: 68,
             height: 68,
@@ -476,6 +497,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
               : "none",
             transition: "all 0.2s ease",
             outline: "none",
+            padding: 0,
           }}
         >
           ⚔️
@@ -498,13 +520,12 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           .show-mobile { display: flex !important; }
           .hide-mobile { display: none !important; }
         }
-        /* Ensure d-pad buttons don't get highlight on tap */
         #mobile-dpad button {
           -webkit-tap-highlight-color: transparent;
           -webkit-touch-callout: none;
         }
         #mobile-dpad button:active {
-          background: hsla(38, 85%, 55%, 0.3) !important;
+          background: hsla(38, 85%, 55%, 0.35) !important;
           border-color: hsl(38, 85%, 55%) !important;
         }
       `}</style>
