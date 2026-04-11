@@ -28,18 +28,12 @@ const BgMusic = () => {
       });
     };
 
-    // Try autoplay right away (works if user already interacted with the origin)
-    audio.play().then(() => {
-      startedRef.current = true;
-      setPlaying(true);
-    }).catch(() => {
-      // Autoplay blocked — attach listeners to start on ANY user gesture
-      // Use capture phase to fire before anything can stopPropagation
-      document.addEventListener("pointerdown", startMusic, { capture: true });
-      document.addEventListener("touchstart", startMusic, { capture: true });
-      document.addEventListener("click", startMusic, { capture: true });
-      document.addEventListener("keydown", startMusic, { capture: true });
-    });
+    // Attach listeners to start on ANY user gesture
+    // Use capture phase to fire before anything can stopPropagation
+    document.addEventListener("pointerdown", startMusic, { capture: true });
+    document.addEventListener("touchstart", startMusic, { capture: true });
+    document.addEventListener("click", startMusic, { capture: true });
+    document.addEventListener("keydown", startMusic, { capture: true });
 
     return () => {
       document.removeEventListener("pointerdown", startMusic, { capture: true });

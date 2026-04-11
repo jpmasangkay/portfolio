@@ -20,98 +20,6 @@ const BUILDING_GUIDE = [
 
 const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
-  const dpadRef = useRef<HTMLDivElement>(null);
-  const interactRef = useRef<HTMLButtonElement>(null);
-  const activeDirRef = useRef({ dx: 0, dz: 0 });
-
-  // Attach native DOM event listeners for D-pad
-  useEffect(() => {
-    const dpad = dpadRef.current;
-    const interactBtn = interactRef.current;
-    if (!dpad) return;
-
-    const cleanups: (() => void)[] = [];
-
-    // Find all buttons with data-dir attribute
-    const buttons = dpad.querySelectorAll<HTMLButtonElement>("button[data-dx]");
-    buttons.forEach((btn) => {
-      const dx = parseInt(btn.dataset.dx || "0", 10);
-      const dz = parseInt(btn.dataset.dz || "0", 10);
-
-      const start = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        activeDirRef.current = { dx, dz };
-        setMobileDir(dx, dz);
-        btn.style.background = "hsla(38, 85%, 55%, 0.35)";
-        btn.style.borderColor = "hsl(38, 85%, 55%)";
-      };
-
-      const end = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        activeDirRef.current = { dx: 0, dz: 0 };
-        setMobileDir(0, 0);
-        btn.style.background = "hsla(255, 20%, 10%, 0.75)";
-        btn.style.borderColor = "hsla(38, 85%, 55%, 0.4)";
-      };
-
-      const move = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-
-      const ctx = (e: Event) => e.preventDefault();
-
-      btn.addEventListener("touchstart", start, { passive: false });
-      btn.addEventListener("touchend", end, { passive: false });
-      btn.addEventListener("touchcancel", end, { passive: false });
-      btn.addEventListener("touchmove", move, { passive: false });
-      btn.addEventListener("pointerdown", start);
-      btn.addEventListener("pointerup", end);
-      btn.addEventListener("pointercancel", end);
-      btn.addEventListener("contextmenu", ctx);
-      // Mouse events as fallback
-      btn.addEventListener("mousedown", start);
-      btn.addEventListener("mouseup", end);
-      btn.addEventListener("mouseleave", end);
-
-      cleanups.push(() => {
-        btn.removeEventListener("touchstart", start);
-        btn.removeEventListener("touchend", end);
-        btn.removeEventListener("touchcancel", end);
-        btn.removeEventListener("touchmove", move);
-        btn.removeEventListener("pointerdown", start);
-        btn.removeEventListener("pointerup", end);
-        btn.removeEventListener("pointercancel", end);
-        btn.removeEventListener("contextmenu", ctx);
-        btn.removeEventListener("mousedown", start);
-        btn.removeEventListener("mouseup", end);
-        btn.removeEventListener("mouseleave", end);
-      });
-    });
-
-    // Interact button
-    if (interactBtn) {
-      const doInteract = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        triggerMobileInteract();
-      };
-      const ctx = (e: Event) => e.preventDefault();
-      interactBtn.addEventListener("touchstart", doInteract, { passive: false });
-      interactBtn.addEventListener("pointerdown", doInteract);
-      interactBtn.addEventListener("contextmenu", ctx);
-
-      cleanups.push(() => {
-        interactBtn.removeEventListener("touchstart", doInteract);
-        interactBtn.removeEventListener("pointerdown", doInteract);
-        interactBtn.removeEventListener("contextmenu", ctx);
-      });
-    }
-
-    return () => cleanups.forEach((fn) => fn());
-  }, [modalOpen]);
 
   if (modalOpen) return null;
 
@@ -428,7 +336,6 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
       <div
         className="show-mobile"
         id="mobile-dpad"
-        ref={dpadRef}
         style={{
           position: "absolute",
           bottom: 24,
@@ -447,11 +354,46 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
           }}
         >
           <div />
-          <button data-dx="0" data-dz="-1" style={dpadBtnBase}>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setMobileDir(0, -1);
+              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onPointerOut={(e) => {
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            style={dpadBtnBase}
+          >
             ▲
           </button>
           <div />
-          <button data-dx="-1" data-dz="0" style={dpadBtnBase}>
+          
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setMobileDir(-1, 0);
+              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onPointerOut={(e) => {
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            style={dpadBtnBase}
+          >
             ◀
           </button>
           <div
@@ -462,11 +404,47 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
               cursor: "default",
             }}
           />
-          <button data-dx="1" data-dz="0" style={dpadBtnBase}>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setMobileDir(1, 0);
+              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onPointerOut={(e) => {
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            style={dpadBtnBase}
+          >
             ▶
           </button>
           <div />
-          <button data-dx="0" data-dz="1" style={dpadBtnBase}>
+          
+          <div />
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setMobileDir(0, 1);
+              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onPointerOut={(e) => {
+              setMobileDir(0, 0);
+              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            style={dpadBtnBase}
+          >
             ▼
           </button>
           <div />
@@ -486,7 +464,11 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
         }}
       >
         <button
-          ref={interactRef}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            triggerMobileInteract();
+          }}
+          onContextMenu={(e) => e.preventDefault()}
           style={{
             width: 68,
             height: 68,
