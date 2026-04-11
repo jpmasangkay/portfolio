@@ -1,94 +1,99 @@
-import PixelNav from "@/components/PixelNav";
-import HeroSection from "@/components/HeroSection";
-import AboutSection from "@/components/AboutSection";
-import ProjectGrid from "@/components/ProjectGrid";
-import BlenderSection from "@/components/BlenderSection";
-import PhotoshopSection from "@/components/PhotoshopSection";
-import Footer from "@/components/Footer";
+import { useState, useCallback, useRef } from "react";
+import BgMusic from "@/components/BgMusic";
+import TownWorld from "@/components/TownWorld";
+import TownOverlay from "@/components/TownOverlay";
+import ScrollModal from "@/components/ScrollModal";
+import TavernModal from "@/components/modals/TavernModal";
+import QuestBoardModal from "@/components/modals/QuestBoardModal";
+import WizardTowerModal from "@/components/modals/WizardTowerModal";
+import GalleryModal from "@/components/modals/GalleryModal";
+import ForgeModal from "@/components/modals/ForgeModal";
+import NoticeBoardModal from "@/components/modals/NoticeBoardModal";
+import GateModal from "@/components/modals/GateModal";
+import ExitModal from "@/components/modals/ExitModal";
+import type { BuildingId } from "@/data/portfolio-data";
 
-const repos = [
-  {
-    title: "grimoire",
-    description: "Public repo (TypeScript). Updated Mar 24, 2026.",
-    href: "https://github.com/jpmasangkay/grimoire",
-    tags: ["TypeScript"],
-  },
-  {
-    title: "umbra",
-    description: "weather-dashboard (TypeScript). Updated Mar 23, 2026.",
-    href: "https://github.com/jpmasangkay/umbra",
-    tags: ["TypeScript"],
-  },
-  {
-    title: "scilab-360",
-    description: "Public repo (TypeScript). Updated Mar 23, 2026.",
-    href: "https://github.com/jpmasangkay/scilab-360",
-    tags: ["TypeScript"],
-  },
-  {
-    title: "atlus-website-imitation",
-    description: "Public repo (HTML). Updated Mar 14, 2026.",
-    href: "https://github.com/jpmasangkay/atlus-website-imitation",
-    tags: ["HTML"],
-  },
-  {
-    title: "marginalia",
-    description: "Public repo (TypeScript). Updated Mar 13, 2026.",
-    href: "https://github.com/jpmasangkay/marginalia",
-    tags: ["TypeScript"],
-  },
-  {
-    title: "simple-employee-details",
-    description: "Public repo (Blade). Updated Mar 9, 2026.",
-    href: "https://github.com/jpmasangkay/simple-employee-details",
-    tags: ["Blade"],
-  },
-  {
-    title: "Flappy-Bird",
-    description: "Public repo (C#). Updated Mar 4, 2026.",
-    href: "https://github.com/jpmasangkay/Flappy-Bird",
-    tags: ["C#"],
-  },
-  {
-    title: "app-calculator",
-    description: "Public repo (Kotlin). Updated Feb 28, 2026.",
-    href: "https://github.com/jpmasangkay/app-calculator",
-    tags: ["Kotlin"],
-  },
-  {
-    title: "germ-shooter",
-    description: "Public repo (C#). Updated Feb 28, 2026.",
-    href: "https://github.com/jpmasangkay/germ-shooter",
-    tags: ["C#"],
-  },
-  {
-    title: "dark-horizon",
-    description: "Public repo (Java). Updated Feb 28, 2026.",
-    href: "https://github.com/jpmasangkay/dark-horizon",
-    tags: ["Java"],
-  },
-  {
-    title: "valentines-day-2026",
-    description: "Public repo (TypeScript). Updated Feb 14, 2026.",
-    href: "https://github.com/jpmasangkay/valentines-day-2026",
-    tags: ["TypeScript"],
-  },
-];
+const modalConfig: Record<BuildingId, { title: string; emoji: string; component: React.FC }> = {
+  gate: { title: "Town Gate", emoji: "🏰", component: GateModal },
+  tavern: { title: "The Tavern", emoji: "🍺", component: TavernModal },
+  questboard: { title: "Quest Board", emoji: "📜", component: QuestBoardModal },
+  wizard: { title: "Wizard's Tower", emoji: "🧙", component: WizardTowerModal },
+  gallery: { title: "The Gallery", emoji: "🎨", component: GalleryModal },
+  forge: { title: "The Forge", emoji: "⚒️", component: ForgeModal },
+  noticeboard: { title: "Notice Board", emoji: "🏆", component: NoticeBoardModal },
+  exit: { title: "Town Exit", emoji: "🕊️", component: ExitModal },
+};
 
 const Index = () => {
+  const [activeModal, setActiveModal] = useState<BuildingId | null>(null);
+  const [nearBuilding, setNearBuilding] = useState<{ id: BuildingId; name: string; emoji: string } | null>(null);
+
+  // Mobile controls refs
+  const mobileDirRef = useRef({ dx: 0, dz: 0 });
+  const mobileInteractRef = useRef<(() => void) | null>(null);
+
+  const handleInteract = useCallback((buildingId: BuildingId) => {
+    setActiveModal(buildingId);
+  }, []);
+
+  const handleNearBuilding = useCallback(
+    (building: { id: BuildingId; name: string; emoji: string } | null) => {
+      setNearBuilding(building);
+    },
+    []
+  );
+
+  const handleClose = useCallback(() => {
+    setActiveModal(null);
+  }, []);
+
+  // Mobile d-pad handler
+  const handleMobileMove = useCallback((dx: number, dz: number) => {
+    mobileDirRef.current = { dx, dz };
+  }, []);
+
+  // Mobile interact handler
+  const handleMobileInteract = useCallback(() => {
+    if (mobileInteractRef.current) {
+      mobileInteractRef.current();
+    }
+  }, []);
+
+  const currentModal = activeModal ? modalConfig[activeModal] : null;
+
   return (
-    <div className="min-h-screen bg-background">
-      <PixelNav />
-      <HeroSection />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <AboutSection />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <ProjectGrid id="repos" heading="// Repositories" projects={repos} columns={3} />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <PhotoshopSection />
-      <hr className="pixel-divider max-w-5xl mx-auto" />
-      <BlenderSection />
-      <Footer />
+    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", background: "#0a0812" }}>
+      {/* Background Music */}
+      <BgMusic />
+
+      {/* 3D World */}
+      <TownWorld
+        onInteract={handleInteract}
+        onNearBuilding={handleNearBuilding}
+        modalOpen={activeModal !== null}
+        mobileDirRef={mobileDirRef}
+        mobileInteractRef={mobileInteractRef}
+      />
+
+      {/* HUD Overlay */}
+      <TownOverlay
+        nearBuilding={nearBuilding}
+        modalOpen={activeModal !== null}
+        onMobileMove={handleMobileMove}
+        onMobileInteract={handleMobileInteract}
+      />
+
+      {/* Content Modal */}
+      {currentModal && (
+        <ScrollModal
+          open={true}
+          onClose={handleClose}
+          title={currentModal.title}
+          emoji={currentModal.emoji}
+        >
+          <currentModal.component />
+        </ScrollModal>
+      )}
     </div>
   );
 };
