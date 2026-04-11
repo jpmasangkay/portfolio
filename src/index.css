@@ -113,4 +113,13 @@
   .scroll-modal-content {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* D-pad and mobile controls must override body touch-action */
+  #mobile-dpad,
+  #mobile-dpad * {
+    touch-action: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
 }

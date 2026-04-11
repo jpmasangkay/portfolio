@@ -5,9 +5,8 @@ const BGM_VOLUME = 0.25;
 const BgMusic = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const attemptedAutoplay = useRef(false);
+  const startedRef = useRef(false);
 
-  // Create audio once, outside of React rendering
   useEffect(() => {
     const audio = new Audio();
     audio.src = "/bgm.webm";
@@ -16,34 +15,37 @@ const BgMusic = () => {
     audio.preload = "auto";
     audioRef.current = audio;
 
-    // Try autoplay immediately
-    const tryAutoplay = () => {
-      if (attemptedAutoplay.current) return;
-      attemptedAutoplay.current = true;
+    // Auto-start music on any user interaction (required by browsers)
+    const startMusic = () => {
+      if (startedRef.current) return;
+      startedRef.current = true;
+
       audio.play().then(() => {
         setPlaying(true);
       }).catch(() => {
-        // Autoplay blocked — wait for any user interaction
-        const startOnInteraction = () => {
-          audio.play().then(() => {
-            setPlaying(true);
-            // Clean up all listeners
-            document.removeEventListener("click", startOnInteraction);
-            document.removeEventListener("keydown", startOnInteraction);
-            document.removeEventListener("touchstart", startOnInteraction);
-          }).catch(() => {});
-        };
-        document.addEventListener("click", startOnInteraction, { once: false });
-        document.addEventListener("keydown", startOnInteraction, { once: false });
-        document.addEventListener("touchstart", startOnInteraction, { once: false });
+        // Reset so it tries again on next interaction
+        startedRef.current = false;
       });
     };
 
-    // Small delay to let the page settle
-    const timer = setTimeout(tryAutoplay, 500);
+    // Try autoplay right away (works if user already interacted with the origin)
+    audio.play().then(() => {
+      startedRef.current = true;
+      setPlaying(true);
+    }).catch(() => {
+      // Autoplay blocked — attach listeners to start on ANY user gesture
+      // Use capture phase to fire before anything can stopPropagation
+      document.addEventListener("pointerdown", startMusic, { capture: true });
+      document.addEventListener("touchstart", startMusic, { capture: true });
+      document.addEventListener("click", startMusic, { capture: true });
+      document.addEventListener("keydown", startMusic, { capture: true });
+    });
 
     return () => {
-      clearTimeout(timer);
+      document.removeEventListener("pointerdown", startMusic, { capture: true });
+      document.removeEventListener("touchstart", startMusic, { capture: true });
+      document.removeEventListener("click", startMusic, { capture: true });
+      document.removeEventListener("keydown", startMusic, { capture: true });
       audio.pause();
       audio.src = "";
       audioRef.current = null;
