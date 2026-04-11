@@ -1,13 +1,12 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import type { BuildingId } from "@/data/portfolio-data";
+import { mobileInput, consumeMobileInteract } from "@/lib/mobile-input";
 
 interface TownWorldProps {
   onInteract: (buildingId: BuildingId) => void;
   onNearBuilding: (building: { id: BuildingId; name: string; emoji: string } | null) => void;
   modalOpen: boolean;
-  mobileDirRef?: React.MutableRefObject<{ dx: number; dz: number }>;
-  mobileInteractRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 // ====== BUILDING LAYOUT ======
@@ -51,7 +50,7 @@ const MOVE_SPEED = 0.12;
 const PLAYER_RADIUS = 0.6;
 const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
 
-const TownWorld = ({ onInteract, onNearBuilding, modalOpen, mobileDirRef, mobileInteractRef }: TownWorldProps) => {
+const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const playerPosRef = useRef(new THREE.Vector3(0, 0, 16));
@@ -71,13 +70,6 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen, mobileDirRef, mobile
       onInteract(near.id);
     }
   }, [onInteract]);
-
-  // Expose interact for mobile
-  useEffect(() => {
-    if (mobileInteractRef) {
-      mobileInteractRef.current = handleInteract;
-    }
-  }, [handleInteract, mobileInteractRef]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -2413,13 +2405,15 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen, mobileDirRef, mobile
         if (keys.has("a") || keys.has("arrowleft")) { dx -= 1; dz += 1; }
         if (keys.has("d") || keys.has("arrowright")) { dx += 1; dz -= 1; }
 
-        // Mobile d-pad input (isometric mapped)
-        if (mobileDirRef?.current) {
-          const md = mobileDirRef.current;
-          if (md.dz < 0) { dx -= 1; dz -= 1; } // up
-          if (md.dz > 0) { dx += 1; dz += 1; } // down
-          if (md.dx < 0) { dx -= 1; dz += 1; } // left
-          if (md.dx > 0) { dx += 1; dz -= 1; } // right
+        // Mobile d-pad input (reads directly from shared module)
+        if (mobileInput.dz < 0) { dx -= 1; dz -= 1; } // up
+        if (mobileInput.dz > 0) { dx += 1; dz += 1; } // down
+        if (mobileInput.dx < 0) { dx -= 1; dz += 1; } // left
+        if (mobileInput.dx > 0) { dx += 1; dz -= 1; } // right
+
+        // Mobile interact button
+        if (consumeMobileInteract()) {
+          handleInteract();
         }
 
         if (dx !== 0 || dz !== 0) {

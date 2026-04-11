@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
+import { setMobileDir, triggerMobileInteract } from "@/lib/mobile-input";
 
 interface TownOverlayProps {
   nearBuilding: { id: BuildingId; name: string; emoji: string } | null;
   modalOpen: boolean;
-  onMobileMove?: (dx: number, dz: number) => void;
-  onMobileInteract?: () => void;
 }
 
 const BUILDING_GUIDE = [
@@ -19,115 +18,104 @@ const BUILDING_GUIDE = [
   { emoji: "🕊️", name: "Exit", desc: "Contact", color: "#ffffff" },
 ];
 
-const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }: TownOverlayProps) => {
+const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
+  const dpadRef = useRef<HTMLDivElement>(null);
+  const interactRef = useRef<HTMLButtonElement>(null);
+  const activeDirRef = useRef({ dx: 0, dz: 0 });
 
-  // Refs for D-pad buttons — we attach native DOM listeners to these
-  const btnUpRef = useRef<HTMLButtonElement>(null);
-  const btnDownRef = useRef<HTMLButtonElement>(null);
-  const btnLeftRef = useRef<HTMLButtonElement>(null);
-  const btnRightRef = useRef<HTMLButtonElement>(null);
-  const interactBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Keep callbacks in refs so native listeners always use latest
-  const onMobileMoveRef = useRef(onMobileMove);
-  const onMobileInteractRef = useRef(onMobileInteract);
+  // Attach native DOM event listeners for D-pad
   useEffect(() => {
-    onMobileMoveRef.current = onMobileMove;
-    onMobileInteractRef.current = onMobileInteract;
-  }, [onMobileMove, onMobileInteract]);
-
-  // Attach native touch/pointer listeners to D-pad buttons
-  useEffect(() => {
-    const buttons = [
-      { ref: btnUpRef, dx: 0, dz: -1 },
-      { ref: btnDownRef, dx: 0, dz: 1 },
-      { ref: btnLeftRef, dx: -1, dz: 0 },
-      { ref: btnRightRef, dx: 1, dz: 0 },
-    ];
+    const dpad = dpadRef.current;
+    const interactBtn = interactRef.current;
+    if (!dpad) return;
 
     const cleanups: (() => void)[] = [];
 
-    buttons.forEach(({ ref, dx, dz }) => {
-      const el = ref.current;
-      if (!el) return;
+    // Find all buttons with data-dir attribute
+    const buttons = dpad.querySelectorAll<HTMLButtonElement>("button[data-dx]");
+    buttons.forEach((btn) => {
+      const dx = parseInt(btn.dataset.dx || "0", 10);
+      const dz = parseInt(btn.dataset.dz || "0", 10);
 
-      const onStart = (e: Event) => {
+      const start = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
-        onMobileMoveRef.current?.(dx, dz);
+        activeDirRef.current = { dx, dz };
+        setMobileDir(dx, dz);
+        btn.style.background = "hsla(38, 85%, 55%, 0.35)";
+        btn.style.borderColor = "hsl(38, 85%, 55%)";
       };
 
-      const onEnd = (e: Event) => {
+      const end = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
-        onMobileMoveRef.current?.(0, 0);
+        activeDirRef.current = { dx: 0, dz: 0 };
+        setMobileDir(0, 0);
+        btn.style.background = "hsla(255, 20%, 10%, 0.75)";
+        btn.style.borderColor = "hsla(38, 85%, 55%, 0.4)";
       };
 
-      const onMove = (e: Event) => {
+      const move = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
       };
 
-      const onContext = (e: Event) => e.preventDefault();
+      const ctx = (e: Event) => e.preventDefault();
 
-      // Use { passive: false } to allow preventDefault on touch events
-      el.addEventListener("touchstart", onStart, { passive: false });
-      el.addEventListener("touchend", onEnd, { passive: false });
-      el.addEventListener("touchcancel", onEnd, { passive: false });
-      el.addEventListener("touchmove", onMove, { passive: false });
-      el.addEventListener("mousedown", onStart);
-      el.addEventListener("mouseup", onEnd);
-      el.addEventListener("mouseleave", onEnd);
-      el.addEventListener("contextmenu", onContext);
-
-      // Also add pointer events as additional fallback
-      el.addEventListener("pointerdown", onStart);
-      el.addEventListener("pointerup", onEnd);
-      el.addEventListener("pointercancel", onEnd);
+      btn.addEventListener("touchstart", start, { passive: false });
+      btn.addEventListener("touchend", end, { passive: false });
+      btn.addEventListener("touchcancel", end, { passive: false });
+      btn.addEventListener("touchmove", move, { passive: false });
+      btn.addEventListener("pointerdown", start);
+      btn.addEventListener("pointerup", end);
+      btn.addEventListener("pointercancel", end);
+      btn.addEventListener("contextmenu", ctx);
+      // Mouse events as fallback
+      btn.addEventListener("mousedown", start);
+      btn.addEventListener("mouseup", end);
+      btn.addEventListener("mouseleave", end);
 
       cleanups.push(() => {
-        el.removeEventListener("touchstart", onStart);
-        el.removeEventListener("touchend", onEnd);
-        el.removeEventListener("touchcancel", onEnd);
-        el.removeEventListener("touchmove", onMove);
-        el.removeEventListener("mousedown", onStart);
-        el.removeEventListener("mouseup", onEnd);
-        el.removeEventListener("mouseleave", onEnd);
-        el.removeEventListener("contextmenu", onContext);
-        el.removeEventListener("pointerdown", onStart);
-        el.removeEventListener("pointerup", onEnd);
-        el.removeEventListener("pointercancel", onEnd);
+        btn.removeEventListener("touchstart", start);
+        btn.removeEventListener("touchend", end);
+        btn.removeEventListener("touchcancel", end);
+        btn.removeEventListener("touchmove", move);
+        btn.removeEventListener("pointerdown", start);
+        btn.removeEventListener("pointerup", end);
+        btn.removeEventListener("pointercancel", end);
+        btn.removeEventListener("contextmenu", ctx);
+        btn.removeEventListener("mousedown", start);
+        btn.removeEventListener("mouseup", end);
+        btn.removeEventListener("mouseleave", end);
       });
     });
 
     // Interact button
-    const interactEl = interactBtnRef.current;
-    if (interactEl) {
-      const onInteract = (e: Event) => {
+    if (interactBtn) {
+      const doInteract = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
-        onMobileInteractRef.current?.();
+        triggerMobileInteract();
       };
-      const onContext = (e: Event) => e.preventDefault();
-
-      interactEl.addEventListener("touchstart", onInteract, { passive: false });
-      interactEl.addEventListener("click", onInteract);
-      interactEl.addEventListener("contextmenu", onContext);
+      const ctx = (e: Event) => e.preventDefault();
+      interactBtn.addEventListener("touchstart", doInteract, { passive: false });
+      interactBtn.addEventListener("pointerdown", doInteract);
+      interactBtn.addEventListener("contextmenu", ctx);
 
       cleanups.push(() => {
-        interactEl.removeEventListener("touchstart", onInteract);
-        interactEl.removeEventListener("click", onInteract);
-        interactEl.removeEventListener("contextmenu", onContext);
+        interactBtn.removeEventListener("touchstart", doInteract);
+        interactBtn.removeEventListener("pointerdown", doInteract);
+        interactBtn.removeEventListener("contextmenu", ctx);
       });
     }
 
-    return () => cleanups.forEach(fn => fn());
-  }, [modalOpen]); // Re-attach when modalOpen changes since we return null when open
+    return () => cleanups.forEach((fn) => fn());
+  }, [modalOpen]);
 
   if (modalOpen) return null;
 
-  const dpadBtnStyle: React.CSSProperties = {
+  const dpadBtnBase: React.CSSProperties = {
     width: 56,
     height: 56,
     display: "flex",
@@ -139,13 +127,13 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
     fontFamily: "'Press Start 2P', cursive",
     fontSize: "16px",
     cursor: "pointer",
-    pointerEvents: "auto",
     touchAction: "none",
     userSelect: "none",
-    WebkitUserSelect: "none",
     borderRadius: 4,
     outline: "none",
     padding: 0,
+    WebkitUserSelect: "none",
+    WebkitTapHighlightColor: "transparent",
   };
 
   return (
@@ -176,7 +164,8 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
             fontFamily: "'Press Start 2P', cursive",
             fontSize: "clamp(8px, 2vw, 12px)",
             color: "hsl(38, 85%, 55%)",
-            textShadow: "0 0 10px hsla(38, 85%, 55%, 0.4), 2px 2px 0 rgba(0,0,0,0.8)",
+            textShadow:
+              "0 0 10px hsla(38, 85%, 55%, 0.4), 2px 2px 0 rgba(0,0,0,0.8)",
             letterSpacing: "0.15em",
           }}
         >
@@ -201,7 +190,8 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
               background: "hsla(255, 20%, 7%, 0.92)",
               border: "2px solid hsl(38, 85%, 55%)",
               padding: "12px 24px",
-              boxShadow: "3px 3px 0 rgba(0,0,0,0.5), 0 0 20px hsla(38, 85%, 55%, 0.2)",
+              boxShadow:
+                "3px 3px 0 rgba(0,0,0,0.5), 0 0 20px hsla(38, 85%, 55%, 0.2)",
             }}
           >
             <p
@@ -222,7 +212,9 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
                 letterSpacing: "0.1em",
               }}
             >
-              <span className="hide-mobile">PRESS [E] OR [SPACE] TO ENTER</span>
+              <span className="hide-mobile">
+                PRESS [E] OR [SPACE] TO ENTER
+              </span>
               <span className="show-mobile">TAP ⚔️ TO ENTER</span>
             </p>
           </div>
@@ -253,8 +245,10 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
               lineHeight: "2",
             }}
           >
-            WASD / ARROWS — MOVE<br />
-            E / SPACE — INTERACT<br />
+            WASD / ARROWS — MOVE
+            <br />
+            E / SPACE — INTERACT
+            <br />
             ESC — CLOSE
           </p>
         </div>
@@ -319,7 +313,9 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
                 }}
               >
                 {item.emoji} {item.name}{" "}
-                <span style={{ color: "hsl(250, 10%, 42%)" }}>— {item.desc}</span>
+                <span style={{ color: "hsl(250, 10%, 42%)" }}>
+                  — {item.desc}
+                </span>
               </p>
             </div>
           ))}
@@ -343,8 +339,12 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
             display: "flex",
             alignItems: "center",
             gap: 4,
-            background: guideOpen ? "hsla(38, 85%, 55%, 0.2)" : "hsla(255, 20%, 10%, 0.8)",
-            border: guideOpen ? "2px solid hsl(38, 85%, 55%)" : "2px solid hsla(250, 15%, 25%, 0.6)",
+            background: guideOpen
+              ? "hsla(38, 85%, 55%, 0.2)"
+              : "hsla(255, 20%, 10%, 0.8)",
+            border: guideOpen
+              ? "2px solid hsl(38, 85%, 55%)"
+              : "2px solid hsla(250, 15%, 25%, 0.6)",
             padding: "6px 10px",
             fontFamily: "'Press Start 2P', cursive",
             fontSize: "7px",
@@ -353,7 +353,9 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
             borderRadius: 2,
             touchAction: "manipulation",
             transition: "all 0.2s ease",
-            boxShadow: guideOpen ? "0 0 10px hsla(38, 85%, 55%, 0.3)" : "none",
+            boxShadow: guideOpen
+              ? "0 0 10px hsla(38, 85%, 55%, 0.3)"
+              : "none",
           }}
         >
           🗺️ {guideOpen ? "✕" : "MAP"}
@@ -412,7 +414,9 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
                   }}
                 >
                   {item.emoji} {item.name}{" "}
-                  <span style={{ color: "hsl(250, 10%, 42%)" }}>— {item.desc}</span>
+                  <span style={{ color: "hsl(250, 10%, 42%)" }}>
+                    — {item.desc}
+                  </span>
                 </p>
               </div>
             ))}
@@ -420,10 +424,11 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         )}
       </div>
 
-      {/* ========== MOBILE: D-Pad (native DOM listeners) ========== */}
+      {/* ========== MOBILE: D-Pad ========== */}
       <div
         className="show-mobile"
         id="mobile-dpad"
+        ref={dpadRef}
         style={{
           position: "absolute",
           bottom: 24,
@@ -442,18 +447,28 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
           }}
         >
           <div />
-          <button ref={btnUpRef} style={dpadBtnStyle}>▲</button>
+          <button data-dx="0" data-dz="-1" style={dpadBtnBase}>
+            ▲
+          </button>
           <div />
-          <button ref={btnLeftRef} style={dpadBtnStyle}>◀</button>
-          <div style={{
-            ...dpadBtnStyle,
-            background: "hsla(255, 20%, 10%, 0.3)",
-            border: "1px solid hsla(250, 15%, 25%, 0.3)",
-            cursor: "default",
-          }} />
-          <button ref={btnRightRef} style={dpadBtnStyle}>▶</button>
+          <button data-dx="-1" data-dz="0" style={dpadBtnBase}>
+            ◀
+          </button>
+          <div
+            style={{
+              ...dpadBtnBase,
+              background: "hsla(255, 20%, 10%, 0.3)",
+              border: "1px solid hsla(250, 15%, 25%, 0.3)",
+              cursor: "default",
+            }}
+          />
+          <button data-dx="1" data-dz="0" style={dpadBtnBase}>
+            ▶
+          </button>
           <div />
-          <button ref={btnDownRef} style={dpadBtnStyle}>▼</button>
+          <button data-dx="0" data-dz="1" style={dpadBtnBase}>
+            ▼
+          </button>
           <div />
         </div>
       </div>
@@ -471,7 +486,7 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         }}
       >
         <button
-          ref={interactBtnRef}
+          ref={interactRef}
           style={{
             width: 68,
             height: 68,
@@ -485,13 +500,16 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
             border: nearBuilding
               ? "3px solid hsl(38, 85%, 55%)"
               : "2px solid hsla(250, 15%, 25%, 0.5)",
-            color: nearBuilding ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 45%)",
+            color: nearBuilding
+              ? "hsl(38, 85%, 55%)"
+              : "hsl(250, 10%, 45%)",
             fontFamily: "'Press Start 2P', cursive",
             fontSize: "20px",
             cursor: "pointer",
             touchAction: "none",
             userSelect: "none",
             WebkitUserSelect: "none",
+            WebkitTapHighlightColor: "transparent",
             boxShadow: nearBuilding
               ? "0 0 15px hsla(38, 85%, 55%, 0.4)"
               : "none",
@@ -523,10 +541,6 @@ const TownOverlay = ({ nearBuilding, modalOpen, onMobileMove, onMobileInteract }
         #mobile-dpad button {
           -webkit-tap-highlight-color: transparent;
           -webkit-touch-callout: none;
-        }
-        #mobile-dpad button:active {
-          background: hsla(38, 85%, 55%, 0.35) !important;
-          border-color: hsl(38, 85%, 55%) !important;
         }
       `}</style>
     </div>

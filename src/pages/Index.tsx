@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import BgMusic from "@/components/BgMusic";
 import TownWorld from "@/components/TownWorld";
 import TownOverlay from "@/components/TownOverlay";
@@ -28,10 +28,6 @@ const Index = () => {
   const [activeModal, setActiveModal] = useState<BuildingId | null>(null);
   const [nearBuilding, setNearBuilding] = useState<{ id: BuildingId; name: string; emoji: string } | null>(null);
 
-  // Mobile controls refs
-  const mobileDirRef = useRef({ dx: 0, dz: 0 });
-  const mobileInteractRef = useRef<(() => void) | null>(null);
-
   const handleInteract = useCallback((buildingId: BuildingId) => {
     setActiveModal(buildingId);
   }, []);
@@ -47,18 +43,6 @@ const Index = () => {
     setActiveModal(null);
   }, []);
 
-  // Mobile d-pad handler
-  const handleMobileMove = useCallback((dx: number, dz: number) => {
-    mobileDirRef.current = { dx, dz };
-  }, []);
-
-  // Mobile interact handler
-  const handleMobileInteract = useCallback(() => {
-    if (mobileInteractRef.current) {
-      mobileInteractRef.current();
-    }
-  }, []);
-
   const currentModal = activeModal ? modalConfig[activeModal] : null;
 
   return (
@@ -71,16 +55,12 @@ const Index = () => {
         onInteract={handleInteract}
         onNearBuilding={handleNearBuilding}
         modalOpen={activeModal !== null}
-        mobileDirRef={mobileDirRef}
-        mobileInteractRef={mobileInteractRef}
       />
 
       {/* HUD Overlay */}
       <TownOverlay
         nearBuilding={nearBuilding}
         modalOpen={activeModal !== null}
-        onMobileMove={handleMobileMove}
-        onMobileInteract={handleMobileInteract}
       />
 
       {/* Content Modal */}
