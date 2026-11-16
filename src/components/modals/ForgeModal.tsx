@@ -1,4 +1,4 @@
-import tavernImage from "@/assets/blender-tavern.png";
+import { forgeWorks } from "@/data/media-works";
 
 const modalText: React.CSSProperties = {
   fontFamily: "'MedievalSharp', serif",
@@ -8,6 +8,7 @@ const modalText: React.CSSProperties = {
 };
 
 const ForgeModal = () => {
+  const work = forgeWorks[0];
   return (
     <div>
       <p style={{ ...modalText, fontStyle: "italic", marginBottom: 20, opacity: 0.8 }}>
@@ -24,8 +25,8 @@ const ForgeModal = () => {
       >
         <div style={{ padding: 6, background: "hsla(250, 12%, 10%, 0.5)" }}>
           <img
-            src={tavernImage}
-            alt="Medieval Tavern - Blender 3D Render"
+            src={work.image}
+            alt={work.alt}
             style={{ width: "100%", height: "auto", display: "block" }}
           />
         </div>
@@ -39,15 +40,11 @@ const ForgeModal = () => {
               lineHeight: 1.6,
             }}
           >
-            🍺 Medieval Tavern
+            🍺 {work.title}
           </p>
-          <p style={{ ...modalText, marginBottom: 12 }}>
-            A cozy medieval tavern scene rendered in Blender, featuring warm candlelight,
-            wooden furniture, and atmospheric stone interiors. The perfect place for
-            adventurers to rest between quests.
-          </p>
+          <p style={{ ...modalText, marginBottom: 12 }}>{work.description}</p>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
-            {["Blender", "3D Modeling", "Lighting", "Rendering"].map((tag) => (
+            {work.tags.map((tag) => (
               <span
                 key={tag}
                 style={{

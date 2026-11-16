@@ -11,67 +11,54 @@ import {
   type ColliderBox,
 } from "@/lib/town-physics";
 
+import {
+  TOWN_BUILDINGS_LAYOUT,
+  type TownBuildingLayout,
+} from "@/lib/town-buildings";
+
 interface TownWorldProps {
   onInteract: (buildingId: BuildingId) => void;
   onNearBuilding: (building: { id: BuildingId; name: string; emoji: string } | null) => void;
+  onPlayerPosChange?: (pos: { x: number; z: number }) => void;
   modalOpen: boolean;
+  paused?: boolean;
 }
 
-// ====== BUILDING LAYOUT ======
-interface BuildingDef {
-  id: BuildingId;
-  name: string;
-  emoji: string;
-  x: number;
-  z: number;
-  w: number;
-  h: number;
-  d: number;
-  roofH: number;
-  wallColor: number;
-  roofColor: number;
-  hasWindows?: boolean;
-  rotY?: number;
-}
-
-const BUILDINGS: BuildingDef[] = [
-  // Spawn: Town Gate (south)
-  { id: "gate", name: "Town Gate", emoji: "🏰", x: 0, z: 14, w: 5, h: 5, d: 2, roofH: 2.5, wallColor: 0x7a7088, roofColor: 0x6a5545, hasWindows: false },
-  // Tavern (south-west)
-  { id: "tavern", name: "The Tavern", emoji: "🍺", x: -8, z: 8, w: 5, h: 3.5, d: 5, roofH: 2, wallColor: 0x8a6040, roofColor: 0xa8622a, hasWindows: true },
-  // Quest Board (center - just a post, but we give it a small shed)
-  { id: "questboard", name: "Quest Board", emoji: "📜", x: 0, z: 3, w: 2, h: 3, d: 1, roofH: 1, wallColor: 0x7a5838, roofColor: 0x5a4030, hasWindows: false },
-  // Wizard's Tower (north)
-  { id: "wizard", name: "Wizard's Tower", emoji: "🧙", x: 0, z: -10, w: 3.5, h: 7, d: 3.5, roofH: 3, wallColor: 0x6a5a8a, roofColor: 0x4a3a6a, hasWindows: true },
-  // Gallery (east)
-  { id: "gallery", name: "The Gallery", emoji: "🎨", x: 9, z: 0, w: 5, h: 3, d: 4, roofH: 1.8, wallColor: 0x8a7a68, roofColor: 0x9a6a3a, hasWindows: true },
-  // Forge (west)
-  { id: "forge", name: "The Forge", emoji: "⚒️", x: -9, z: -2, w: 4, h: 3, d: 4, roofH: 1.5, wallColor: 0x6a5858, roofColor: 0x5a4030, hasWindows: true },
-  // Notice Board (east-south)
-  { id: "noticeboard", name: "Notice Board", emoji: "🏆", x: 8, z: 8, w: 2.5, h: 2.5, d: 2, roofH: 1.2, wallColor: 0x7a6a58, roofColor: 0x8a6a3a, hasWindows: false },
-  // Town Exit (north-east)
-  { id: "exit", name: "Town Exit", emoji: "🕊️", x: 10, z: -10, w: 3, h: 4, d: 2, roofH: 2, wallColor: 0x7a7a88, roofColor: 0x6a6070, hasWindows: false },
-];
+type BuildingDef = TownBuildingLayout;
+const BUILDINGS: BuildingDef[] = TOWN_BUILDINGS_LAYOUT;
 
 const INTERACT_DISTANCE = 4.5;
 const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
 
-const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) => {
+const TownWorld = ({
+  onInteract,
+  onNearBuilding,
+  onPlayerPosChange,
+  modalOpen,
+  paused = false,
+}: TownWorldProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const playerPosRef = useRef(new THREE.Vector3(0, 0, 7.0));
   const nearBuildingRef = useRef<BuildingDef | null>(null);
   const animFrameRef = useRef<number>(0);
-  const modalOpenRef = useRef(modalOpen);
+  const modalOpenRef = useRef(modalOpen || paused);
+  const pausedRef = useRef(paused);
+  const onPlayerPosChangeRef = useRef(onPlayerPosChange);
 
-  // Keep modalOpen ref in sync and release held inputs when modal opens
   useEffect(() => {
-    modalOpenRef.current = modalOpen;
-    if (modalOpen) {
+    onPlayerPosChangeRef.current = onPlayerPosChange;
+  }, [onPlayerPosChange]);
+
+  // Keep modalOpen / paused ref in sync and release held inputs when paused or modal opens
+  useEffect(() => {
+    modalOpenRef.current = modalOpen || paused;
+    pausedRef.current = paused;
+    if (modalOpen || paused) {
       keysRef.current.clear();
       setMobileDir(0, 0);
     }
-  }, [modalOpen]);
+  }, [modalOpen, paused]);
 
   const handleInteract = useCallback(() => {
     if (modalOpenRef.current) return;
@@ -2531,9 +2518,17 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     let lastTime = performance.now();
     let elapsed = 0;
     let walkCycle = 0;
+    let lastPosEmitTime = 0;
+    let lastEmittedX = playerPosRef.current.x;
+    let lastEmittedZ = playerPosRef.current.z;
+    onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
 
     const animate = (now: number) => {
       animFrameRef.current = requestAnimationFrame(animate);
+      if (pausedRef.current) {
+        lastTime = now;
+        return;
+      }
       const dt = clampDeltaSec(now - lastTime);
       lastTime = now;
       elapsed += dt;
@@ -2636,6 +2631,17 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
           0,
           playerPosRef.current.z
         );
+
+        if (
+          now - lastPosEmitTime > 110 &&
+          (Math.abs(playerPosRef.current.x - lastEmittedX) > 0.15 ||
+            Math.abs(playerPosRef.current.z - lastEmittedZ) > 0.15)
+        ) {
+          lastPosEmitTime = now;
+          lastEmittedX = playerPosRef.current.x;
+          lastEmittedZ = playerPosRef.current.z;
+          onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
+        }
       } else {
         sweepDone = true;
       }

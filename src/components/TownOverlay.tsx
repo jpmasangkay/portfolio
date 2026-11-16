@@ -1,27 +1,52 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
 import { setMobileDir, triggerMobileInteract } from "@/lib/mobile-input";
+import {
+  TOWN_BUILDINGS_LAYOUT,
+  findNearestUnvisitedBuilding,
+} from "@/lib/town-buildings";
 
 interface TownOverlayProps {
   nearBuilding: { id: BuildingId; name: string; emoji: string } | null;
   modalOpen: boolean;
+  visitedBuildings: ReadonlySet<BuildingId>;
+  playerPos: { x: number; z: number };
+  onSelectBuilding: (buildingId: BuildingId) => void;
+  onToggleQuickView: () => void;
 }
 
-const BUILDING_GUIDE = [
-  { emoji: "🏰", name: "Gate", desc: "Welcome", color: "#ffdd44" },
-  { emoji: "🍺", name: "Tavern", desc: "About Me", color: "#ff8833" },
-  { emoji: "📜", name: "Quest Board", desc: "Repos", color: "#44ddff" },
-  { emoji: "🧙", name: "Tower", desc: "Skills", color: "#aa66ff" },
-  { emoji: "🎨", name: "Gallery", desc: "Artwork", color: "#ff66aa" },
-  { emoji: "⚒️", name: "Forge", desc: "3D Work", color: "#ff4422" },
-  { emoji: "🏆", name: "Notice", desc: "Certs", color: "#44ff66" },
-  { emoji: "🕊️", name: "Exit", desc: "Contact", color: "#ffffff" },
-];
+function toMinimapCoords(x: number, z: number): { mx: number; my: number } {
+  // Isometric projection so minimap UP matches pressing W / screen UP
+  const isoX = (x - z) * Math.SQRT1_2;
+  const isoY = (x + z) * Math.SQRT1_2;
+  // Town spans roughly [-20..20] -> iso range approx [-24..24]
+  const scale = 1.9;
+  return {
+    mx: 54 + isoX * scale,
+    my: 54 + isoY * scale,
+  };
+}
 
-const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
+const TownOverlay = ({
+  nearBuilding,
+  modalOpen,
+  visitedBuildings,
+  playerPos,
+  onSelectBuilding,
+  onToggleQuickView,
+}: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
 
   if (modalOpen) return null;
+
+  const visitedCount = visitedBuildings.size;
+  const totalCount = TOWN_BUILDINGS_LAYOUT.length;
+  const nearestUnvisited = findNearestUnvisitedBuilding(
+    playerPos.x,
+    playerPos.z,
+    visitedBuildings
+  );
+  const playerMapPos = toMinimapCoords(playerPos.x, playerPos.z);
 
   const dpadBtnBase: React.CSSProperties = {
     width: 56,
@@ -44,6 +69,80 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
     WebkitTapHighlightColor: "transparent",
   };
 
+  const renderGuideList = (compact: boolean) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: compact ? 3 : 4 }}>
+      {TOWN_BUILDINGS_LAYOUT.map((item) => {
+        const visited = visitedBuildings.has(item.id);
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className="guide-item-btn"
+            onClick={() => {
+              onSelectBuilding(item.id);
+              if (compact) setGuideOpen(false);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: compact ? 6 : 10,
+              background: visited
+                ? "hsla(150, 35%, 16%, 0.35)"
+                : "hsla(252, 18%, 14%, 0.7)",
+              border: "1px solid hsla(250, 15%, 26%, 0.7)",
+              padding: compact ? "5px 7px" : "5px 8px",
+              cursor: "pointer",
+              textAlign: "left",
+              borderRadius: 2,
+              width: "100%",
+              transition: "border-color 0.15s ease, transform 0.1s ease, background 0.15s ease",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: compact ? 5 : 8 }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: compact ? 6 : 8,
+                  height: compact ? 6 : 8,
+                  borderRadius: "50%",
+                  background: item.beaconColorCss,
+                  boxShadow: visited ? "none" : `0 0 6px ${item.beaconColorCss}`,
+                  opacity: visited ? 0.65 : 1,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "'Press Start 2P', cursive",
+                  fontSize: compact ? "6px" : "7.5px",
+                  color: visited ? "hsl(250, 10%, 72%)" : "hsl(40, 25%, 88%)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {item.emoji} {item.shortName}{" "}
+                <span style={{ color: "hsl(250, 10%, 52%)" }}>— {item.guideDesc}</span>
+              </span>
+            </span>
+            <span
+              aria-label={visited ? "Visited" : "Unvisited"}
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: compact ? 9 : 11,
+                fontWeight: 700,
+                color: visited ? "hsl(150, 60%, 55%)" : "hsl(38, 85%, 55%)",
+                marginLeft: 6,
+                flexShrink: 0,
+              }}
+            >
+              {visited ? "✓" : "→"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div
       id="town-overlay"
@@ -57,28 +156,189 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
         pointerEvents: "none",
       }}
     >
-      {/* Title */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          textAlign: "center",
-        }}
-      >
+      {/* Title + Subtitle */}
+      <div className="realm-header">
         <p
           style={{
             fontFamily: "'Press Start 2P', cursive",
-            fontSize: "clamp(8px, 2vw, 12px)",
+            fontSize: "clamp(9px, 2vw, 12px)",
             color: "hsl(38, 85%, 55%)",
             textShadow:
-              "0 0 10px hsla(38, 85%, 55%, 0.4), 2px 2px 0 rgba(0,0,0,0.8)",
-            letterSpacing: "0.15em",
+              "0 0 10px hsla(38, 85%, 55%, 0.4), 2px 2px 0 rgba(0,0,0,0.85)",
+            letterSpacing: "0.14em",
+            marginBottom: 4,
           }}
         >
-          🗡️ SHEALTIEL'S REALM
+          🗡️ SHEALTIEL&apos;S REALM
         </p>
+        <p
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontSize: "clamp(10px, 1.4vw, 12px)",
+            color: "hsl(40, 20%, 82%)",
+            background: "hsla(255, 20%, 7%, 0.68)",
+            border: "1px solid hsla(250, 15%, 28%, 0.6)",
+            padding: "2px 10px",
+            display: "inline-block",
+          }}
+        >
+          Shealtiel Masangkay · CS &amp; Web Developer ({visitedCount}/{totalCount} visited)
+        </p>
+      </div>
+
+      {/* Top-right Quick View Toggle + Nearest Unvisited Compass (Desktop & Mobile) */}
+      <div
+        className="top-right-hud"
+        style={{
+          position: "absolute",
+          pointerEvents: "auto",
+          zIndex: 22,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 6,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            id="quick-view-toggle"
+            onClick={onToggleQuickView}
+            style={{
+              fontFamily: "'Press Start 2P', cursive",
+              fontSize: "7.5px",
+              color: "hsl(40, 25%, 90%)",
+              background: "hsla(255, 20%, 8%, 0.9)",
+              border: "1px solid hsla(38, 85%, 55%, 0.55)",
+              padding: "8px 11px",
+              cursor: "pointer",
+              borderRadius: 2,
+              whiteSpace: "nowrap",
+              boxShadow: "0 0 10px rgba(0,0,0,0.45)",
+              transition: "border-color 0.15s ease, background 0.15s ease",
+            }}
+          >
+            📄 Quick View
+          </button>
+
+          <button
+            type="button"
+            className="show-mobile"
+            onClick={() => setGuideOpen(!guideOpen)}
+            style={{
+              alignItems: "center",
+              gap: 4,
+              background: guideOpen
+                ? "hsla(38, 85%, 55%, 0.2)"
+                : "hsla(255, 20%, 10%, 0.85)",
+              border: guideOpen
+                ? "1px solid hsl(38, 85%, 55%)"
+                : "1px solid hsla(250, 15%, 30%, 0.7)",
+              padding: "8px 10px",
+              fontFamily: "'Press Start 2P', cursive",
+              fontSize: "7.5px",
+              color: guideOpen ? "hsl(38, 85%, 55%)" : "hsl(40, 20%, 82%)",
+              cursor: "pointer",
+              borderRadius: 2,
+              touchAction: "manipulation",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🗺️ {guideOpen ? "✕" : "MAP"}
+          </button>
+        </div>
+
+        {/* Nearest unvisited directional arrow (desktop sits under Quick View; mobile sits cleanly below subtitle) */}
+        <div className="compass-anchor">
+          {nearestUnvisited ? (
+            <button
+              type="button"
+              id="unvisited-compass"
+              onClick={() => onSelectBuilding(nearestUnvisited.building.id)}
+              title={`Jump to ${nearestUnvisited.building.name}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                background: "hsla(255, 20%, 8%, 0.88)",
+                border: "1px solid hsla(250, 15%, 28%, 0.8)",
+                padding: "5px 9px",
+                cursor: "pointer",
+                borderRadius: 2,
+                color: "hsl(40, 25%, 88%)",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  border: `1px solid ${nearestUnvisited.building.beaconColorCss}`,
+                  color: nearestUnvisited.building.beaconColorCss,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  transform: `rotate(${Math.round(nearestUnvisited.angleDeg)}deg)`,
+                  transition: "transform 0.12s linear",
+                }}
+              >
+                ↑
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                Next: {nearestUnvisited.building.emoji} {nearestUnvisited.building.shortName} (
+                {Math.round(nearestUnvisited.distance)}m)
+              </span>
+            </button>
+          ) : (
+            <div
+              style={{
+                background: "hsla(150, 35%, 14%, 0.88)",
+                border: "1px solid hsla(150, 50%, 45%, 0.6)",
+                padding: "5px 9px",
+                borderRadius: 2,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                color: "hsl(150, 60%, 65%)",
+              }}
+            >
+              ✓ All 8 landmarks explored
+            </div>
+          )}
+        </div>
+
+        {/* Mobile collapsible Building Guide + Minimap */}
+        {guideOpen && (
+          <div
+            className="show-mobile"
+            style={{
+              position: "relative",
+              zIndex: 30,
+              flexDirection: "column",
+              gap: 8,
+              background: "hsla(255, 20%, 7%, 0.96)",
+              border: "1px solid hsla(250, 15%, 28%, 0.85)",
+              padding: "10px",
+              borderRadius: 2,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.65)",
+              minWidth: 230,
+            }}
+          >
+            <p
+              style={{
+                fontFamily: "'Press Start 2P', cursive",
+                fontSize: "7px",
+                color: "hsl(38, 85%, 55%)",
+                letterSpacing: "0.08em",
+              }}
+            >
+              CLICK A LANDMARK ({visitedCount}/{totalCount})
+            </p>
+            {renderGuideList(true)}
+          </div>
+        )}
       </div>
 
       {/* Interaction prompt */}
@@ -142,8 +402,8 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
       >
         <div
           style={{
-            background: "hsla(255, 20%, 7%, 0.75)",
-            border: "1px solid hsla(250, 15%, 25%, 0.6)",
+            background: "hsla(255, 20%, 7%, 0.8)",
+            border: "1px solid hsla(250, 15%, 28%, 0.7)",
             padding: "8px 12px",
           }}
         >
@@ -151,7 +411,7 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
             style={{
               fontFamily: "'Press Start 2P', cursive",
               fontSize: "7px",
-              color: "hsl(250, 10%, 50%)",
+              color: "hsl(250, 10%, 60%)",
               lineHeight: "2",
             }}
           >
@@ -164,174 +424,105 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
         </div>
       </div>
 
-      {/* Building Legend Guide (desktop) */}
+      {/* Desktop Minimap + Clickable Building Guide */}
       <div
         className="hide-mobile"
         style={{
           position: "absolute",
           bottom: "clamp(12px, 2vw, 16px)",
           right: "clamp(12px, 2vw, 16px)",
+          pointerEvents: "auto",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 8,
         }}
       >
+        {/* Isometric Minimap */}
         <div
+          aria-label="Town Minimap"
           style={{
-            background: "hsla(255, 20%, 7%, 0.88)",
-            border: "2px solid hsla(250, 15%, 25%, 0.6)",
-            padding: "clamp(10px, 2vw, 16px) clamp(12px, 2vw, 18px)",
+            background: "hsla(255, 20%, 7%, 0.9)",
+            border: "1px solid hsla(250, 15%, 28%, 0.8)",
+            padding: 8,
             borderRadius: 2,
             boxShadow: "0 0 15px rgba(0,0,0,0.5)",
+          }}
+        >
+          <svg width={108} height={108} viewBox="0 0 108 108" role="img" aria-label="Town minimap showing visited and unvisited buildings">
+            <rect x={0} y={0} width={108} height={108} fill="#121428" stroke="#2d3048" strokeWidth={1} />
+            {/* Isometric road hints */}
+            <line x1={54} y1={14} x2={54} y2={94} stroke="#3c3740" strokeWidth={3} strokeDasharray="2 2" opacity={0.45} />
+            <line x1={14} y1={54} x2={94} y2={54} stroke="#3c3740" strokeWidth={3} strokeDasharray="2 2" opacity={0.45} />
+            {/* Building pins */}
+            {TOWN_BUILDINGS_LAYOUT.map((b) => {
+              const { mx, my } = toMinimapCoords(b.x, b.z);
+              const visited = visitedBuildings.has(b.id);
+              return (
+                <g
+                  key={b.id}
+                  onClick={() => onSelectBuilding(b.id)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <title>{`${b.name} (${visited ? "Visited" : "Unvisited"})`}</title>
+                  {!visited && (
+                    <circle
+                      cx={mx}
+                      cy={my}
+                      r={6.5}
+                      fill="none"
+                      stroke={b.beaconColorCss}
+                      strokeWidth={1}
+                      opacity={0.75}
+                    />
+                  )}
+                  <circle
+                    cx={mx}
+                    cy={my}
+                    r={3.8}
+                    fill={visited ? "#3b8a64" : b.beaconColorCss}
+                    stroke="#0d0e1a"
+                    strokeWidth={1}
+                  />
+                </g>
+              );
+            })}
+            {/* Player dot */}
+            <circle
+              cx={playerMapPos.mx}
+              cy={playerMapPos.my}
+              r={3.5}
+              fill="#f0c248"
+              stroke="#ffffff"
+              strokeWidth={1.2}
+            />
+          </svg>
+        </div>
+
+        {/* Building Legend Guide (clickable + visited ticks) */}
+        <div
+          style={{
+            background: "hsla(255, 20%, 7%, 0.9)",
+            border: "1px solid hsla(250, 15%, 28%, 0.8)",
+            padding: "10px 12px",
+            borderRadius: 2,
+            boxShadow: "0 0 15px rgba(0,0,0,0.5)",
+            minWidth: 235,
           }}
         >
           <p
             style={{
               fontFamily: "'Press Start 2P', cursive",
-              fontSize: "clamp(7px, 1.5vw, 9px)",
+              fontSize: "8px",
               color: "hsl(38, 85%, 55%)",
-              marginBottom: "clamp(8px, 1.5vw, 12px)",
-              letterSpacing: "0.12em",
-              textShadow: "0 0 8px hsla(38, 85%, 55%, 0.3)",
+              marginBottom: 8,
+              letterSpacing: "0.1em",
             }}
           >
-            🗺️ BUILDING GUIDE
+            🗺️ BUILDING GUIDE ({visitedCount}/{totalCount})
           </p>
-          {BUILDING_GUIDE.map((item, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "clamp(6px, 1vw, 10px)",
-                marginBottom: "clamp(4px, 0.8vw, 6px)",
-              }}
-            >
-              <div
-                style={{
-                  width: "clamp(6px, 1.2vw, 10px)",
-                  height: "clamp(6px, 1.2vw, 10px)",
-                  borderRadius: "50%",
-                  background: item.color,
-                  boxShadow: `0 0 6px ${item.color}`,
-                  flexShrink: 0,
-                }}
-              />
-              <p
-                style={{
-                  fontFamily: "'Press Start 2P', cursive",
-                  fontSize: "clamp(6px, 1.2vw, 8px)",
-                  color: "hsl(250, 10%, 65%)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {item.emoji} {item.name}{" "}
-                <span style={{ color: "hsl(250, 10%, 42%)" }}>
-                  — {item.desc}
-                </span>
-              </p>
-            </div>
-          ))}
+          {renderGuideList(false)}
         </div>
-      </div>
-
-      {/* ========== MOBILE: Building Guide (collapsible) ========== */}
-      <div
-        className="show-mobile"
-        style={{
-          position: "absolute",
-          top: 42,
-          right: 8,
-          pointerEvents: "auto",
-          zIndex: 20,
-        }}
-      >
-        <button
-          onClick={() => setGuideOpen(!guideOpen)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            background: guideOpen
-              ? "hsla(38, 85%, 55%, 0.2)"
-              : "hsla(255, 20%, 10%, 0.8)",
-            border: guideOpen
-              ? "2px solid hsl(38, 85%, 55%)"
-              : "2px solid hsla(250, 15%, 25%, 0.6)",
-            padding: "6px 10px",
-            fontFamily: "'Press Start 2P', cursive",
-            fontSize: "7px",
-            color: guideOpen ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 60%)",
-            cursor: "pointer",
-            borderRadius: 2,
-            touchAction: "manipulation",
-            transition: "all 0.2s ease",
-            boxShadow: guideOpen
-              ? "0 0 10px hsla(38, 85%, 55%, 0.3)"
-              : "none",
-          }}
-        >
-          🗺️ {guideOpen ? "✕" : "MAP"}
-        </button>
-
-        {guideOpen && (
-          <div
-            style={{
-              marginTop: 4,
-              background: "hsla(255, 20%, 7%, 0.94)",
-              border: "2px solid hsla(250, 15%, 25%, 0.6)",
-              padding: "10px 12px",
-              borderRadius: 2,
-              boxShadow: "0 0 15px rgba(0,0,0,0.6)",
-              animation: "fadeInGuide 0.2s ease-out",
-            }}
-          >
-            <p
-              style={{
-                fontFamily: "'Press Start 2P', cursive",
-                fontSize: "6px",
-                color: "hsl(38, 85%, 55%)",
-                marginBottom: 8,
-                letterSpacing: "0.1em",
-                textShadow: "0 0 8px hsla(38, 85%, 55%, 0.3)",
-              }}
-            >
-              BUILDING GUIDE
-            </p>
-            {BUILDING_GUIDE.map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  marginBottom: 4,
-                }}
-              >
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: item.color,
-                    boxShadow: `0 0 4px ${item.color}`,
-                    flexShrink: 0,
-                  }}
-                />
-                <p
-                  style={{
-                    fontFamily: "'Press Start 2P', cursive",
-                    fontSize: "5px",
-                    color: "hsl(250, 10%, 65%)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.emoji} {item.name}{" "}
-                  <span style={{ color: "hsl(250, 10%, 42%)" }}>
-                    — {item.desc}
-                  </span>
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ========== MOBILE: D-Pad ========== */}
@@ -357,6 +548,8 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
         >
           <div />
           <button
+            type="button"
+            aria-label="Move up"
             onPointerDown={(e) => {
               e.preventDefault();
               setMobileDir(0, -1);
@@ -377,8 +570,10 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
             ▲
           </button>
           <div />
-          
+
           <button
+            type="button"
+            aria-label="Move left"
             onPointerDown={(e) => {
               e.preventDefault();
               setMobileDir(-1, 0);
@@ -407,6 +602,8 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
             }}
           />
           <button
+            type="button"
+            aria-label="Move right"
             onPointerDown={(e) => {
               e.preventDefault();
               setMobileDir(1, 0);
@@ -428,6 +625,8 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
           </button>
           <div />
           <button
+            type="button"
+            aria-label="Move down"
             onPointerDown={(e) => {
               e.preventDefault();
               setMobileDir(0, 1);
@@ -464,6 +663,8 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
         }}
       >
         <button
+          type="button"
+          aria-label="Interact with nearby building"
           onPointerDown={(e) => {
             e.preventDefault();
             triggerMobileInteract();
@@ -510,15 +711,49 @@ const TownOverlay = ({ nearBuilding, modalOpen }: TownOverlayProps) => {
           from { opacity: 0; transform: translateX(-50%) translateY(10px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
-        @keyframes fadeInGuide {
-          from { opacity: 0; transform: translateY(-5px); }
-          to { opacity: 1; transform: translateY(0); }
+        .realm-header {
+          position: absolute;
+          top: 14px;
+          left: 50%;
+          transform: translateX(-50%);
+          text-align: center;
+          width: max-content;
+          max-width: calc(100vw - 32px);
+        }
+        .top-right-hud {
+          top: 16px;
+          right: 16px;
+        }
+        .guide-item-btn:hover {
+          border-color: hsl(38, 85%, 55%) !important;
+          transform: translateX(-2px);
+        }
+        .guide-item-btn:focus-visible,
+        #quick-view-toggle:focus-visible,
+        #unvisited-compass:focus-visible {
+          outline: 2px solid hsl(38, 85%, 55%);
+          outline-offset: 2px;
         }
         .show-mobile { display: none !important; }
-        .hide-mobile { display: block; }
+        .hide-mobile { display: flex; }
         @media (max-width: 768px), (pointer: coarse) {
           .show-mobile { display: flex !important; }
           .hide-mobile { display: none !important; }
+          .realm-header {
+            top: 46px;
+          }
+          .top-right-hud {
+            top: 8px;
+            right: 8px;
+          }
+          .compass-anchor {
+            position: fixed;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 19;
+            white-space: nowrap;
+          }
         }
         #mobile-dpad button {
           -webkit-tap-highlight-color: transparent;

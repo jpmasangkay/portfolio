@@ -1,9 +1,4 @@
-import wallowsPoster from "@/assets/photoshop-wallows.png";
-import nexonPoster from "@/assets/photoshop-nexon.png";
-import magazineFrontBack from "@/assets/magazine-front-back.png";
-import magazinePages1to6 from "@/assets/magazine-pages-1-6.png";
-import magazinePages2to5 from "@/assets/magazine-pages-2-5.png";
-import magazinePages3to4 from "@/assets/magazine-pages-3-4.png";
+import { galleryMagazines, galleryPosters } from "@/data/media-works";
 
 const modalText: React.CSSProperties = {
   fontFamily: "'MedievalSharp', serif",
@@ -11,26 +6,6 @@ const modalText: React.CSSProperties = {
   fontSize: 14,
   lineHeight: 1.7,
 };
-
-const works = [
-  {
-    title: "Wallows Tour Poster",
-    description: "Event-style poster layout with bold typography, high-contrast photo cutout, and textured background.",
-    image: wallowsPoster,
-  },
-  {
-    title: "Nexon Product Ad",
-    description: "Gaming product advertisement composition using layered imagery, angled panels, and brand-forward callouts.",
-    image: nexonPoster,
-  },
-];
-
-const magazines = [
-  { title: "Front & Back Cover", image: magazineFrontBack },
-  { title: "Pages 1–6", image: magazinePages1to6 },
-  { title: "Pages 2–5", image: magazinePages2to5 },
-  { title: "Pages 3–4", image: magazinePages3to4 },
-];
 
 const GalleryModal = () => {
   return (
@@ -41,7 +16,7 @@ const GalleryModal = () => {
 
       {/* Posters */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        {works.map((work) => (
+        {galleryPosters.map((work) => (
           <div
             key={work.title}
             style={{
@@ -92,7 +67,7 @@ const GalleryModal = () => {
         📖 Enchanted Manuscripts
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-        {magazines.map((mag) => (
+        {galleryMagazines.map((mag) => (
           <div
             key={mag.title}
             style={{
