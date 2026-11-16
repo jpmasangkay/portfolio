@@ -55,12 +55,14 @@ export const projects = [
     period: "Jan 2026 – Present",
     description:
       "Full-stack enrollment management system with student records, strand-based fee computation, PDF export, and role-based access control.",
+    href: undefined as string | undefined,
   },
   {
     title: "Scilab-360",
     tech: "TypeScript · React",
     period: "2026",
     description: "Science/lab-themed web application built with TypeScript and React.",
+    href: "https://github.com/jpmasangkay/scilab-360",
   },
   {
     title: "Germ Shooter",
@@ -68,27 +70,84 @@ export const projects = [
     period: "2025",
     description:
       "3D shooter game featuring enemy spawning, player mechanics, and game state management.",
+    href: "https://github.com/jpmasangkay/germ-shooter",
   },
   {
     title: "Grimoire",
     tech: "TypeScript · React",
     period: "2026",
     description: "Personal knowledge management and note-taking web application.",
+    href: "https://github.com/jpmasangkay/grimoire",
   },
 ];
 
 export const repos = [
-  { title: "grimoire", desc: "TypeScript · Updated Mar 24, 2026", href: "https://github.com/jpmasangkay/grimoire", tags: ["TypeScript"] },
-  { title: "umbra", desc: "Weather dashboard · TypeScript", href: "https://github.com/jpmasangkay/umbra", tags: ["TypeScript"] },
-  { title: "scilab-360", desc: "TypeScript · Updated Mar 23, 2026", href: "https://github.com/jpmasangkay/scilab-360", tags: ["TypeScript"] },
-  { title: "atlus-website-imitation", desc: "HTML · Updated Mar 14, 2026", href: "https://github.com/jpmasangkay/atlus-website-imitation", tags: ["HTML"] },
-  { title: "marginalia", desc: "TypeScript · Updated Mar 13, 2026", href: "https://github.com/jpmasangkay/marginalia", tags: ["TypeScript"] },
-  { title: "simple-employee-details", desc: "Blade · Updated Mar 9, 2026", href: "https://github.com/jpmasangkay/simple-employee-details", tags: ["Blade"] },
-  { title: "Flappy-Bird", desc: "C# · Updated Mar 4, 2026", href: "https://github.com/jpmasangkay/Flappy-Bird", tags: ["C#"] },
-  { title: "app-calculator", desc: "Kotlin · Updated Feb 28, 2026", href: "https://github.com/jpmasangkay/app-calculator", tags: ["Kotlin"] },
-  { title: "germ-shooter", desc: "C# · Updated Feb 28, 2026", href: "https://github.com/jpmasangkay/germ-shooter", tags: ["C#"] },
-  { title: "dark-horizon", desc: "Java · Updated Feb 28, 2026", href: "https://github.com/jpmasangkay/dark-horizon", tags: ["Java"] },
-  { title: "valentines-day-2026", desc: "TypeScript · Updated Feb 14, 2026", href: "https://github.com/jpmasangkay/valentines-day-2026", tags: ["TypeScript"] },
+  {
+    title: "grimoire",
+    desc: "Personal knowledge management and note-taking web app in TypeScript & React.",
+    href: "https://github.com/jpmasangkay/grimoire",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "umbra",
+    desc: "Weather dashboard web app with clean atmospheric forecast views.",
+    href: "https://github.com/jpmasangkay/umbra",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "scilab-360",
+    desc: "Science and laboratory-themed interactive web application in TypeScript.",
+    href: "https://github.com/jpmasangkay/scilab-360",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "atlus-website-imitation",
+    desc: "Stylized ATLUS-inspired website layout and UI recreation in HTML & CSS.",
+    href: "https://github.com/jpmasangkay/atlus-website-imitation",
+    tags: ["HTML"],
+  },
+  {
+    title: "marginalia",
+    desc: "Minimalist TypeScript reading notes and margin annotation web project.",
+    href: "https://github.com/jpmasangkay/marginalia",
+    tags: ["TypeScript"],
+  },
+  {
+    title: "simple-employee-details",
+    desc: "Employee directory and record CRUD web app using Laravel Blade templates.",
+    href: "https://github.com/jpmasangkay/simple-employee-details",
+    tags: ["Blade"],
+  },
+  {
+    title: "Flappy-Bird",
+    desc: "Classic Flappy Bird arcade game clone built with C#.",
+    href: "https://github.com/jpmasangkay/Flappy-Bird",
+    tags: ["C#"],
+  },
+  {
+    title: "app-calculator",
+    desc: "Android mobile calculator application written in Kotlin.",
+    href: "https://github.com/jpmasangkay/app-calculator",
+    tags: ["Kotlin"],
+  },
+  {
+    title: "germ-shooter",
+    desc: "3D shooter game with enemy wave spawning and game state logic in Unity C#.",
+    href: "https://github.com/jpmasangkay/germ-shooter",
+    tags: ["C#"],
+  },
+  {
+    title: "dark-horizon",
+    desc: "Java application exploring dark-fantasy desktop/game programming patterns.",
+    href: "https://github.com/jpmasangkay/dark-horizon",
+    tags: ["Java"],
+  },
+  {
+    title: "valentines-day-2026",
+    desc: "Interactive seasonal web greeting experience crafted in TypeScript.",
+    href: "https://github.com/jpmasangkay/valentines-day-2026",
+    tags: ["TypeScript"],
+  },
 ];
 
 export const skills = {
@@ -98,9 +157,27 @@ export const skills = {
 };
 
 export const certificates = [
-  { name: "Gemini Certified", issuer: "Google", year: "2026" },
-  { name: "Hour of Code (Minecraft)", issuer: "Microsoft", year: "2026" },
-  { name: "Trademark Awareness Session", issuer: "Ateneo", year: "2026" },
+  {
+    name: "Gemini Certified",
+    issuer: "Google",
+    year: "2026",
+    url: "https://educertifications.google",
+    linkLabel: "Program Portal ↗",
+  },
+  {
+    name: "Hour of Code (Minecraft)",
+    issuer: "Microsoft",
+    year: "2026",
+    url: "https://education.minecraft.net/en-us/lessons/hour-of-code",
+    linkLabel: "Program Page ↗",
+  },
+  {
+    name: "Trademark Awareness Session",
+    issuer: "Ateneo",
+    year: "2026",
+    url: "https://aipo.ateneo.edu",
+    linkLabel: "Ateneo IPO ↗",
+  },
 ];
 
 // Building definitions for the town

@@ -83,6 +83,18 @@
   }
 }
 
+/* Native dialog top-layer backdrop & scroll containment */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: hsla(255, 22%, 4%, 0.84);
+  backdrop-filter: blur(4px);
+}
+
 /* ====== MOBILE RESPONSIVE ====== */
 
 /* Prevent iOS rubber-banding */

@@ -11,7 +11,7 @@ interface ScrollModalProps {
 const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps) => {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
+      if (e.key === "Escape" && open && !document.querySelector("dialog[open]")) {
         onClose();
       }
     };

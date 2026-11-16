@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   certificates,
   education,
@@ -8,6 +9,7 @@ import {
   skills,
 } from "@/data/portfolio-data";
 import { forgeWorks, galleryMagazines, galleryPosters } from "@/data/media-works";
+import ImageLightbox, { type LightboxImage } from "@/components/ImageLightbox";
 
 interface QuickViewPortfolioProps {
   onBackToWorld: () => void;
@@ -20,6 +22,26 @@ const sectionCardStyle: React.CSSProperties = {
 };
 
 const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const allMediaImages: LightboxImage[] = useMemo(
+    () => [
+      ...[...galleryPosters, ...galleryMagazines].map((item) => ({
+        src: item.image,
+        alt: item.title,
+        title: item.title,
+        description: item.description,
+      })),
+      ...forgeWorks.map((w) => ({
+        src: w.image,
+        alt: w.alt,
+        title: w.title,
+        description: w.description,
+      })),
+    ],
+    []
+  );
+  const galleryOffset = galleryPosters.length + galleryMagazines.length;
+
   return (
     <div
       id="quick-view-page"
@@ -388,7 +410,7 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
               gap: 12,
             }}
           >
-            {[...galleryPosters, ...galleryMagazines].map((item) => (
+            {[...galleryPosters, ...galleryMagazines].map((item, i) => (
               <figure
                 key={item.title}
                 style={{
@@ -397,12 +419,27 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
                   padding: 10,
                 }}
               >
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  loading="lazy"
-                  style={{ width: "100%", height: "auto", display: "block", marginBottom: 8 }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setLightboxIdx(i)}
+                  aria-label={`Inspect ${item.title}`}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "zoom-in",
+                    marginBottom: 8,
+                  }}
+                >
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    loading="lazy"
+                    style={{ width: "100%", height: "auto", display: "block" }}
+                  />
+                </button>
                 <figcaption style={{ fontSize: 13 }}>
                   <strong>{item.title}</strong> —{" "}
                   <span style={{ color: "hsl(250, 10%, 66%)" }}>{item.description}</span>
@@ -423,7 +460,7 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
           >
             3D Work (Blender)
           </h2>
-          {forgeWorks.map((work) => (
+          {forgeWorks.map((work, i) => (
             <figure
               key={work.title}
               style={{
@@ -432,12 +469,27 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
                 padding: 12,
               }}
             >
-              <img
-                src={work.image}
-                alt={work.alt}
-                loading="lazy"
-                style={{ width: "100%", height: "auto", display: "block", marginBottom: 10 }}
-              />
+              <button
+                type="button"
+                onClick={() => setLightboxIdx(galleryOffset + i)}
+                aria-label={`Inspect ${work.title}`}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 0,
+                  background: "none",
+                  border: "none",
+                  cursor: "zoom-in",
+                  marginBottom: 10,
+                }}
+              >
+                <img
+                  src={work.image}
+                  alt={work.alt}
+                  loading="lazy"
+                  style={{ width: "100%", height: "auto", display: "block" }}
+                />
+              </button>
               <figcaption style={{ fontSize: 14, lineHeight: 1.6 }}>
                 <strong>{work.title}</strong> — {work.description}
               </figcaption>
@@ -465,9 +517,29 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
                   padding: "10px 12px",
                   background: "hsl(252, 16%, 13%)",
                   border: "1px solid hsl(250, 15%, 22%)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                <strong>{c.name}</strong> — {c.issuer} ({c.year})
+                <span>
+                  <strong>{c.name}</strong> — {c.issuer} ({c.year})
+                </span>
+                <a
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    color: "hsl(150, 50%, 58%)",
+                    textDecoration: "none",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                  }}
+                >
+                  {c.linkLabel}
+                </a>
               </li>
             ))}
           </ul>
@@ -532,6 +604,11 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
           </div>
         </section>
       </main>
+      <ImageLightbox
+        items={allMediaImages}
+        activeIndex={lightboxIdx}
+        onChangeIndex={setLightboxIdx}
+      />
       <style>{`
         @media (max-width: 1260px) {
           .qv-header-inner {

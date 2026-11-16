@@ -14,8 +14,10 @@ describe("Portfolio modals", () => {
     expect(screen.getByText(/Sacred Heart College/)).toBeInTheDocument();
   });
 
-  it("renders repository links in QuestBoardModal", () => {
+  it("renders featured quests and repository links in QuestBoardModal", () => {
     render(<QuestBoardModal />);
+    expect(screen.getByText("LGMCI Enrollment System")).toBeInTheDocument();
+    expect(screen.getByText("Germ Shooter")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /grimoire/i });
     expect(link).toHaveAttribute("href", "https://github.com/jpmasangkay/grimoire");
   });
@@ -27,9 +29,10 @@ describe("Portfolio modals", () => {
     expect(screen.getByText("Blender")).toBeInTheDocument();
   });
 
-  it("renders certificates in NoticeBoardModal", () => {
+  it("renders linked certificates in NoticeBoardModal", () => {
     render(<NoticeBoardModal />);
-    expect(screen.getByText("Gemini Certified")).toBeInTheDocument();
+    const geminiLink = screen.getByRole("link", { name: /Gemini Certified/i });
+    expect(geminiLink).toHaveAttribute("href", "https://educertifications.google");
     expect(screen.getByText(/Google · 2026/)).toBeInTheDocument();
   });
 
