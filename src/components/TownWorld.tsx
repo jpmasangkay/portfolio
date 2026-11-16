@@ -1,7 +1,15 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import type { BuildingId } from "@/data/portfolio-data";
-import { mobileInput, consumeMobileInteract } from "@/lib/mobile-input";
+import { mobileInput, consumeMobileInteract, setMobileDir } from "@/lib/mobile-input";
+import {
+  CAMERA_SMOOTH_RATE,
+  WALK_CYCLE_RAD_PER_SEC,
+  clampDeltaSec,
+  expDampingAlpha,
+  resolvePlayerStep,
+  type ColliderBox,
+} from "@/lib/town-physics";
 
 interface TownWorldProps {
   onInteract: (buildingId: BuildingId) => void;
@@ -46,21 +54,23 @@ const BUILDINGS: BuildingDef[] = [
 ];
 
 const INTERACT_DISTANCE = 4.5;
-const MOVE_SPEED = 0.12;
-const PLAYER_RADIUS = 0.6;
 const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
 
 const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const playerPosRef = useRef(new THREE.Vector3(0, 0, 16.5));
+  const playerPosRef = useRef(new THREE.Vector3(0, 0, 7.0));
   const nearBuildingRef = useRef<BuildingDef | null>(null);
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen);
 
-  // Keep modalOpen ref in sync
+  // Keep modalOpen ref in sync and release held inputs when modal opens
   useEffect(() => {
     modalOpenRef.current = modalOpen;
+    if (modalOpen) {
+      keysRef.current.clear();
+      setMobileDir(0, 0);
+    }
   }, [modalOpen]);
 
   const handleInteract = useCallback(() => {
@@ -114,9 +124,9 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       camSize, -camSize,
       0.1, 100
     );
-    // Isometric angle
-    camera.position.set(15, 18, 15);
-    camera.lookAt(0, 0, 0);
+    // Isometric angle centered on player
+    camera.position.set(playerPosRef.current.x + 15, 18, playerPosRef.current.z + 15);
+    camera.lookAt(playerPosRef.current.x, 0, playerPosRef.current.z);
 
     // ====== MATERIALS ======
     const groundMat = new THREE.MeshLambertMaterial({ color: 0x3a4a30 });
@@ -397,20 +407,41 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     addFence(7.5, -3, 7.5, -7, 5);
 
     // ====== BUILD BUILDINGS ======
-    const buildingBounds: { def: BuildingDef; minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
+    const colliders: ColliderBox[] = [];
+    const addCollider = (minX: number, maxX: number, minZ: number, maxZ: number, label?: string) => {
+      colliders.push({ minX, maxX, minZ, maxZ, label });
+    };
     const beacons: { mesh: THREE.Mesh; glow: THREE.Mesh; baseY: number }[] = [];
 
     BUILDINGS.forEach((b) => {
       const group = new THREE.Group();
       const wallMat = new THREE.MeshLambertMaterial({ color: b.wallColor });
       const roofMaterial = new THREE.MeshLambertMaterial({ color: b.roofColor });
+      const isOpenGate = b.id === "gate";
 
-      // Main body
-      const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), wallMat);
-      body.position.y = b.h / 2;
-      body.castShadow = true;
-      body.receiveShadow = true;
-      group.add(body);
+      // Main body (Town Gate uses two side piers + overhead bridge to leave a walkable archway)
+      if (isOpenGate) {
+        const pierW = 1.35;
+        const pierOffsetX = b.w / 2 - pierW / 2;
+        for (const side of [-1, 1]) {
+          const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, b.h, b.d), wallMat);
+          pier.position.set(side * pierOffsetX, b.h / 2, 0);
+          pier.castShadow = true;
+          pier.receiveShadow = true;
+          group.add(pier);
+        }
+        const upperWall = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h * 0.44, b.d), wallMat);
+        upperWall.position.set(0, b.h * 0.78, 0);
+        upperWall.castShadow = true;
+        upperWall.receiveShadow = true;
+        group.add(upperWall);
+      } else {
+        const body = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), wallMat);
+        body.position.y = b.h / 2;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        group.add(body);
+      }
 
       // Roof (pyramid)
       const roofGeo = new THREE.ConeGeometry(Math.max(b.w, b.d) * 0.78, b.roofH, 4);
@@ -442,12 +473,14 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
         group.add(winL);
       }
 
-      // Door (dark rectangle on front)
-      const doorMat = new THREE.MeshLambertMaterial({ color: 0x2a1a10 });
-      const doorGeo = new THREE.BoxGeometry(b.w * 0.25, b.h * 0.45, 0.15);
-      const door = new THREE.Mesh(doorGeo, doorMat);
-      door.position.set(0, b.h * 0.22, b.d / 2 + 0.08);
-      group.add(door);
+      // Door (dark rectangle on front) — omitted for open gate archway
+      if (!isOpenGate) {
+        const doorMat = new THREE.MeshLambertMaterial({ color: 0x2a1a10 });
+        const doorGeo = new THREE.BoxGeometry(b.w * 0.25, b.h * 0.45, 0.15);
+        const door = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(0, b.h * 0.22, b.d / 2 + 0.08);
+        group.add(door);
+      }
 
       // Chimney for tavern and forge
       if (b.id === "tavern" || b.id === "forge") {
@@ -460,9 +493,9 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
 
       // ---- TIMBER FRAMING (half-timbered style) ----
       const timberMat = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
-      if (b.hasWindows || b.id === "gate") {
-        // Horizontal beams
-        for (let ty = 0; ty <= 1; ty++) {
+      if (b.hasWindows || isOpenGate) {
+        // Horizontal beams (skip lower crossbar across open gate archway)
+        for (let ty = isOpenGate ? 1 : 0; ty <= 1; ty++) {
           const hBeam = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.1, 0.1, 0.12), timberMat);
           hBeam.position.set(0, b.h * (0.35 + ty * 0.4), b.d / 2 + 0.06);
           group.add(hBeam);
@@ -505,30 +538,39 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
         }
       }
 
-      // ---- DOOR FRAME ----
+      // ---- DOOR FRAME & FOUNDATION & STEP ----
       const frameMat = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
-      // Lintel
-      const lintel = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.32, 0.08, 0.18), frameMat);
-      lintel.position.set(0, b.h * 0.45, b.d / 2 + 0.1);
-      group.add(lintel);
-      // Door frame sides
-      for (let ds = -1; ds <= 1; ds += 2) {
-        const dFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, b.h * 0.45, 0.18), frameMat);
-        dFrame.position.set(ds * b.w * 0.135, b.h * 0.22, b.d / 2 + 0.1);
-        group.add(dFrame);
+      if (!isOpenGate) {
+        // Lintel
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.32, 0.08, 0.18), frameMat);
+        lintel.position.set(0, b.h * 0.45, b.d / 2 + 0.1);
+        group.add(lintel);
+        // Door frame sides
+        for (let ds = -1; ds <= 1; ds += 2) {
+          const dFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, b.h * 0.45, 0.18), frameMat);
+          dFrame.position.set(ds * b.w * 0.135, b.h * 0.22, b.d / 2 + 0.1);
+          group.add(dFrame);
+        }
+
+        // ---- STONE FOUNDATION ----
+        const foundationMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+        const foundation = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.2, 0.2, b.d + 0.2), foundationMat);
+        foundation.position.y = 0.1;
+        group.add(foundation);
+
+        // ---- FRONT DOORSTEP ----
+        const stepMat = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
+        const step = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.35, 0.1, 0.3), stepMat);
+        step.position.set(0, 0.05, b.d / 2 + 0.25);
+        group.add(step);
+      } else {
+        const foundationMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+        for (const side of [-1, 1]) {
+          const pierBase = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, b.d + 0.2), foundationMat);
+          pierBase.position.set(side * (b.w / 2 - 0.675), 0.1, 0);
+          group.add(pierBase);
+        }
       }
-
-      // ---- STONE FOUNDATION ----
-      const foundationMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
-      const foundation = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.2, 0.2, b.d + 0.2), foundationMat);
-      foundation.position.y = 0.1;
-      group.add(foundation);
-
-      // ---- FRONT DOORSTEP ----
-      const stepMat = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
-      const step = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.35, 0.1, 0.3), stepMat);
-      step.position.set(0, 0.05, b.d / 2 + 0.25);
-      group.add(step);
 
       // ---- ROOF TRIM ----
       const trimMat = new THREE.MeshLambertMaterial({ color: b.roofColor - 0x111111 });
@@ -603,17 +645,19 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       }
 
       // ---- DOOR AWNING / OVERHANG ----
-      const awningMat = new THREE.MeshLambertMaterial({ color: b.roofColor });
-      const awning = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.4, 0.06, 0.5), awningMat);
-      awning.position.set(0, b.h * 0.48, b.d / 2 + 0.3);
-      awning.rotation.x = -0.15;
-      group.add(awning);
-      // Awning supports
-      for (let as = -1; as <= 1; as += 2) {
-        const aSup = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.35, 0.04), timberMat);
-        aSup.position.set(as * b.w * 0.18, b.h * 0.35, b.d / 2 + 0.45);
-        aSup.rotation.x = -0.2;
-        group.add(aSup);
+      if (!isOpenGate) {
+        const awningMat = new THREE.MeshLambertMaterial({ color: b.roofColor });
+        const awning = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.4, 0.06, 0.5), awningMat);
+        awning.position.set(0, b.h * 0.48, b.d / 2 + 0.3);
+        awning.rotation.x = -0.15;
+        group.add(awning);
+        // Awning supports
+        for (let as = -1; as <= 1; as += 2) {
+          const aSup = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.35, 0.04), timberMat);
+          aSup.position.set(as * b.w * 0.18, b.h * 0.35, b.d / 2 + 0.45);
+          aSup.rotation.x = -0.2;
+          group.add(aSup);
+        }
       }
 
       // ---- SECOND STORY COLOR BAND (for taller buildings) ----
@@ -739,26 +783,23 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
         }
       }
 
-      // -- GATE: Arch decoration, portcullis lines, shield emblem --
+      // -- GATE: Arch decoration, raised portcullis lines, shield emblem --
       if (b.id === "gate") {
-        // Arch over door
+        // Arch over opening
         const archMat = new THREE.MeshLambertMaterial({ color: 0x5a5068 });
-        const arch = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.35, 0.2, 0.3), archMat);
-        arch.position.set(0, b.h * 0.5, b.d / 2 + 0.15);
+        const arch = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.48, 0.22, 0.3), archMat);
+        arch.position.set(0, b.h * 0.56, b.d / 2 + 0.15);
         group.add(arch);
-        // Portcullis bars
+        // Raised portcullis bars (tucked into top of archway so road is open)
         const barMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
-        for (let pb = -2; pb <= 2; pb++) {
-          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, b.h * 0.44, 0.04), barMat);
-          bar.position.set(pb * 0.2, b.h * 0.22, b.d / 2 + 0.2);
+        for (let pb = -3; pb <= 3; pb++) {
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04), barMat);
+          bar.position.set(pb * 0.25, b.h * 0.52, b.d / 2 + 0.12);
           group.add(bar);
         }
-        // Horizontal bars
-        for (let hb = 0; hb < 3; hb++) {
-          const hBar = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.3, 0.04, 0.04), barMat);
-          hBar.position.set(0, b.h * 0.1 + hb * b.h * 0.12, b.d / 2 + 0.2);
-          group.add(hBar);
-        }
+        const hBar = new THREE.Mesh(new THREE.BoxGeometry(b.w * 0.42, 0.05, 0.05), barMat);
+        hBar.position.set(0, b.h * 0.48, b.d / 2 + 0.12);
+        group.add(hBar);
         // Shield emblem
         const shieldMat = new THREE.MeshLambertMaterial({ color: 0xccaa33 });
         const shield = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.08), shieldMat);
@@ -860,13 +901,19 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
 
       // Collision bounds (AABB)
       const pad = 0.5;
-      buildingBounds.push({
-        def: b,
-        minX: b.x - b.w / 2 - pad,
-        maxX: b.x + b.w / 2 + pad,
-        minZ: b.z - b.d / 2 - pad,
-        maxZ: b.z + b.d / 2 + pad,
-      });
+      if (isOpenGate) {
+        // Gate piers & flanking guard towers leave the central road archway walkable
+        addCollider(b.x - 4.2, b.x - 1.35, b.z - b.d / 2 - pad, b.z + b.d / 2 + pad, "gate-west");
+        addCollider(b.x + 1.35, b.x + 4.2, b.z - b.d / 2 - pad, b.z + b.d / 2 + pad, "gate-east");
+      } else {
+        addCollider(
+          b.x - b.w / 2 - pad,
+          b.x + b.w / 2 + pad,
+          b.z - b.d / 2 - pad,
+          b.z + b.d / 2 + pad,
+          b.id
+        );
+      }
 
       // ====== FLOATING BEACON MARKER above building ======
       const beaconColors: Record<string, number> = {
@@ -940,10 +987,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       scene.add(top);
 
       // Add tree collision
-      buildingBounds.push({
-        def: { id: "gate", name: "", emoji: "", x, z, w: 1, h: 1, d: 1, roofH: 0, wallColor: 0, roofColor: 0 },
-        minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5,
-      });
+      addCollider(x - 0.5, x + 0.5, z - 0.5, z + 0.5, "tree");
     };
 
     // ====== OAK TREE (rounded, layered canopy) ======
@@ -989,10 +1033,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       }
       tGroup.position.set(x, 0, z);
       scene.add(tGroup);
-      buildingBounds.push({
-        def: { id: "gate", name: "", emoji: "", x, z, w: 1, h: 1, d: 1, roofH: 0, wallColor: 0, roofColor: 0 },
-        minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5,
-      });
+      addCollider(x - 0.5, x + 0.5, z - 0.5, z + 0.5, "oak");
       // Undergrowth
       for (let ug = 0; ug < 3; ug++) {
         const ugBush = new THREE.Mesh(
@@ -1029,10 +1070,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       }
       tGroup.position.set(x, 0, z);
       scene.add(tGroup);
-      buildingBounds.push({
-        def: { id: "gate", name: "", emoji: "", x, z, w: 1, h: 1, d: 1, roofH: 0, wallColor: 0, roofColor: 0 },
-        minX: x - 0.4, maxX: x + 0.4, minZ: z - 0.4, maxZ: z + 0.4,
-      });
+      addCollider(x - 0.4, x + 0.4, z - 0.4, z + 0.4, "pine");
     };
 
     // ====== BIRCH TREE (white bark, delicate) ======
@@ -1071,10 +1109,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       }
       tGroup.position.set(x, 0, z);
       scene.add(tGroup);
-      buildingBounds.push({
-        def: { id: "gate", name: "", emoji: "", x, z, w: 1, h: 1, d: 1, roofH: 0, wallColor: 0, roofColor: 0 },
-        minX: x - 0.4, maxX: x + 0.4, minZ: z - 0.4, maxZ: z + 0.4,
-      });
+      addCollider(x - 0.4, x + 0.4, z - 0.4, z + 0.4, "birch");
     };
 
     // Scatter trees (mixed types)
@@ -1137,6 +1172,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     well.position.set(-3, 0.5, 0);
     well.castShadow = true;
     scene.add(well);
+    addCollider(-3.9, -2.1, -0.9, 0.9, "well");
     const wellRoof = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1, 4), new THREE.MeshLambertMaterial({ color: 0x5c3d2e }));
     wellRoof.position.set(-3, 2.3, 0);
     wellRoof.rotation.y = Math.PI / 4;
@@ -1215,6 +1251,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       wall.castShadow = true;
       wall.receiveShadow = true;
       scene.add(wall);
+      addCollider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, "wall");
     };
     // North wall
     for (let i = -16; i <= 16; i += 4) {
@@ -1256,6 +1293,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       counter.position.set(x, 0.4, z);
       counter.castShadow = true;
       scene.add(counter);
+      addCollider(x - 1.0, x + 1.0, z - 0.5, z + 0.5, "stall");
       // Posts
       for (let px = -0.8; px <= 0.8; px += 1.6) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2, 0.12), stallWoodMat);
@@ -1319,6 +1357,9 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.15, 5), bridgeWoodMat);
     bridgeDeck.position.set(5, 0.3, -5);
     scene.add(bridgeDeck);
+    // Pond water colliders flanking the walkable bridge deck (x in [4.25, 5.75])
+    addCollider(2.9, 4.15, -7.0, -3.0, "pond-west");
+    addCollider(5.85, 8.2, -7.0, -3.0, "pond-east-pier");
     // Bridge railings
     for (let side = -1; side <= 1; side += 2) {
       for (let pz = -2; pz <= 2; pz += 1) {
@@ -1644,6 +1685,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     }
     campfireGroup.position.set(3, 0, -8);
     scene.add(campfireGroup);
+    addCollider(2.35, 3.65, -8.65, -7.35, "campfire");
     // Campfire light
     const campfireLight = new THREE.PointLight(0xff6622, 3, 10, 1.5);
     campfireLight.position.set(3, 1, -8);
@@ -1688,6 +1730,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     wagonGroup.rotation.y = 0.3;
     wagonGroup.castShadow = true;
     scene.add(wagonGroup);
+    addCollider(-14.4, -11.6, -6.0, -4.0, "wagon");
 
     // ====== CLOTHESLINES (between buildings) ======
     const ropeMat = new THREE.MeshLambertMaterial({ color: 0x8a7a6a });
@@ -1822,7 +1865,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       smokePositions[i * 3] = cp.x + (Math.random() - 0.5) * 0.3;
       smokePositions[i * 3 + 1] = 5 + Math.random() * 3;
       smokePositions[i * 3 + 2] = cp.z + (Math.random() - 0.5) * 0.3;
-      smokeSpeeds[i] = 0.005 + Math.random() * 0.01;
+      smokeSpeeds[i] = 0.3 + Math.random() * 0.6;
     }
     smokeGeo.setAttribute("position", new THREE.BufferAttribute(smokePositions, 3));
     const smokeMat = new THREE.PointsMaterial({
@@ -1860,6 +1903,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     const fountainBase = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.5, 0.4, 8), fountainMat);
     fountainBase.position.set(-3.5, 0.2, -3.5);
     scene.add(fountainBase);
+    addCollider(-5.0, -2.0, -5.0, -2.0, "fountain");
     const fountainWater = new THREE.Mesh(
       new THREE.CylinderGeometry(1.1, 1.1, 0.15, 8),
       new THREE.MeshLambertMaterial({ color: 0x3366cc, transparent: true, opacity: 0.5 })
@@ -1891,7 +1935,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       dropPos[i * 3] = -3.5 + Math.cos(a) * 0.3;
       dropPos[i * 3 + 1] = 1.8 + Math.random();
       dropPos[i * 3 + 2] = -3.5 + Math.sin(a) * 0.3;
-      dropSpeeds[i] = 0.02 + Math.random() * 0.02;
+      dropSpeeds[i] = 1.2 + Math.random() * 1.2;
     }
     dropGeo.setAttribute("position", new THREE.BufferAttribute(dropPos, 3));
     const dropMat = new THREE.PointsMaterial({
@@ -2016,20 +2060,21 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     addWallLantern(-2.5, 3, 14);
     addWallLantern(2.5, 3, 14);
 
-    // ====== WEATHER VANE (on tavern roof) ======
+    // ====== WEATHER VANE (on tavern roof: h=3.5, roofH=2 => peak at y=5.5) ======
+    const tavernPeakY = 3.5 + 2;
     const vaneMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
     const vanePole = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1, 0.05), vaneMat);
-    vanePole.position.set(-8, 5 + 2 + 0.5, 8);
+    vanePole.position.set(-8, tavernPeakY + 0.45, 8);
     scene.add(vanePole);
     const vaneArrow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 0.04), vaneMat);
-    vaneArrow.position.set(-8, 5 + 2 + 0.8, 8);
+    vaneArrow.position.set(-8, tavernPeakY + 0.75, 8);
     scene.add(vaneArrow);
     // Arrow tip
     const vaneHead = new THREE.Mesh(
       new THREE.ConeGeometry(0.08, 0.2, 3),
       new THREE.MeshLambertMaterial({ color: 0xccaa33 })
     );
-    vaneHead.position.set(-7.6, 5 + 2 + 0.8, 8);
+    vaneHead.position.set(-7.6, tavernPeakY + 0.75, 8);
     vaneHead.rotation.z = -Math.PI / 2;
     scene.add(vaneHead);
 
@@ -2112,6 +2157,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     npcGroup.position.set(-1.5, 0, 0);
     npcGroup.rotation.y = 0.5;
     scene.add(npcGroup);
+    addCollider(-1.85, -1.15, -0.35, 0.35, "npc-well");
 
     // ====== SECOND NPC (by gallery) ======
     const npc2Group = new THREE.Group();
@@ -2145,6 +2191,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     npc2Group.position.set(11.5, 0, 2.5);
     npc2Group.rotation.y = -1;
     scene.add(npc2Group);
+    addCollider(11.15, 11.85, 2.15, 2.85, "npc-gallery");
 
     // ====== RAIN BARRELS (catchment barrels near buildings) ======
     const rainBarrelMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
@@ -2344,17 +2391,37 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     scene.add(new THREE.Points(starGeo, starMat));
 
     // ====== INPUT ======
+    const GAME_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "e"]);
+    const isInteractiveElement = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(target.tagName) || target.isContentEditable);
+
     const onKeyDown = (e: KeyboardEvent) => {
-      keysRef.current.add(e.key.toLowerCase());
-      if (e.key.toLowerCase() === "e" || e.key === " ") {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (GAME_KEYS.has(key) && !modalOpenRef.current && !isInteractiveElement(e.target)) {
+        e.preventDefault();
+      }
+      if (modalOpenRef.current) return;
+      keysRef.current.add(key);
+      if ((key === "e" || key === " ") && !e.repeat && !isInteractiveElement(e.target)) {
         handleInteract();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       keysRef.current.delete(e.key.toLowerCase());
     };
+    const clearHeldInputs = () => {
+      keysRef.current.clear();
+      setMobileDir(0, 0);
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) clearHeldInputs();
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearHeldInputs);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     // ====== RESIZE ======
     const onResize = () => {
@@ -2369,30 +2436,16 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     };
     window.addEventListener("resize", onResize);
 
-    // ====== COLLISION CHECK ======
-    const checkCollision = (x: number, z: number): boolean => {
-      for (const b of buildingBounds) {
-        if (
-          x + PLAYER_RADIUS > b.minX &&
-          x - PLAYER_RADIUS < b.maxX &&
-          z + PLAYER_RADIUS > b.minZ &&
-          z - PLAYER_RADIUS < b.maxZ
-        ) {
-          return true;
-        }
-      }
-      // World bounds
-      if (Math.abs(x) > 19 || z > 19 || z < -17) return true;
-      return false;
-    };
-
-    // ====== ANIMATION ======
-    const clock = new THREE.Clock();
+    // ====== ANIMATION (frame-rate independent with clamped delta) ======
+    let lastTime = performance.now();
+    let elapsed = 0;
     let walkCycle = 0;
 
-    const animate = () => {
+    const animate = (now: number) => {
       animFrameRef.current = requestAnimationFrame(animate);
-      const elapsed = clock.getElapsedTime();
+      const dt = clampDeltaSec(now - lastTime);
+      lastTime = now;
+      elapsed += dt;
       const keys = keysRef.current;
 
       // ---- Player movement ----
@@ -2405,37 +2458,34 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
         if (keys.has("a") || keys.has("arrowleft")) { dx -= 1; dz += 1; }
         if (keys.has("d") || keys.has("arrowright")) { dx += 1; dz -= 1; }
 
-        // Mobile d-pad input (reads directly from shared module)
-        if (mobileInput.dz < 0) { dx -= 1; dz -= 1; } // up
-        if (mobileInput.dz > 0) { dx += 1; dz += 1; } // down
-        if (mobileInput.dx < 0) { dx -= 1; dz += 1; } // left
-        if (mobileInput.dx > 0) { dx += 1; dz -= 1; } // right
+        // Mobile d-pad / thumbstick input (reads directly from shared module)
+        if (mobileInput.dx !== 0 || mobileInput.dz !== 0) {
+          dx += mobileInput.dx + mobileInput.dz;
+          dz += mobileInput.dz - mobileInput.dx;
+        }
 
         // Mobile interact button
         if (consumeMobileInteract()) {
           handleInteract();
         }
 
-        if (dx !== 0 || dz !== 0) {
-          const len = Math.sqrt(dx * dx + dz * dz);
-          dx = (dx / len) * MOVE_SPEED;
-          dz = (dz / len) * MOVE_SPEED;
+        const step = resolvePlayerStep(
+          { x: playerPosRef.current.x, z: playerPosRef.current.z },
+          dx,
+          dz,
+          dt,
+          colliders
+        );
 
-          const newX = playerPosRef.current.x + dx;
-          const newZ = playerPosRef.current.z + dz;
-
-          if (!checkCollision(newX, playerPosRef.current.z)) {
-            playerPosRef.current.x = newX;
-          }
-          if (!checkCollision(playerPosRef.current.x, newZ)) {
-            playerPosRef.current.z = newZ;
-          }
+        if (step.moved) {
+          playerPosRef.current.x = step.x;
+          playerPosRef.current.z = step.z;
 
           // Face direction
-          playerGroup.rotation.y = Math.atan2(dx, dz);
+          playerGroup.rotation.y = Math.atan2(step.moveDx, step.moveDz);
 
-          // Walk animation — full body
-          walkCycle += 0.18;
+          // Walk animation — full body (frame-rate independent)
+          walkCycle += WALK_CYCLE_RAD_PER_SEC * dt;
           const swing = Math.sin(walkCycle);
           const swingAlt = Math.sin(walkCycle + Math.PI);
 
@@ -2466,21 +2516,23 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
           cape.rotation.x = swing * 0.15;
           cape.position.z = -0.25 - Math.abs(swing) * 0.05;
         } else {
-          // Idle — smoothly return to default
-          legL.rotation.x *= 0.8;
-          legR.rotation.x *= 0.8;
+          // Idle — smoothly return to default (frame-rate independent exponential decay)
+          const idleDecay = Math.exp(-13.4 * dt);
+          const capeDecay = Math.exp(-9.75 * dt);
+          legL.rotation.x *= idleDecay;
+          legR.rotation.x *= idleDecay;
           legL.position.y = 0.25;
           legR.position.y = 0.25;
-          legL.position.z *= 0.8;
-          legR.position.z *= 0.8;
-          rBlade.rotation.x *= 0.8;
-          rHandle.rotation.x *= 0.8;
-          lBlade.rotation.x *= 0.8;
-          lHandle.rotation.x *= 0.8;
+          legL.position.z *= idleDecay;
+          legR.position.z *= idleDecay;
+          rBlade.rotation.x *= idleDecay;
+          rHandle.rotation.x *= idleDecay;
+          lBlade.rotation.x *= idleDecay;
+          lHandle.rotation.x *= idleDecay;
           playerBody.position.y = 0.8;
           playerHead.position.y = 1.45;
           hoodTop.position.y = 1.8;
-          cape.rotation.x *= 0.85;
+          cape.rotation.x *= capeDecay;
           cape.position.z = -0.25;
         }
 
@@ -2494,8 +2546,9 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       // ---- Camera follow player ----
       const camTargetX = playerPosRef.current.x + 15;
       const camTargetZ = playerPosRef.current.z + 15;
-      camera.position.x += (camTargetX - camera.position.x) * 0.08;
-      camera.position.z += (camTargetZ - camera.position.z) * 0.08;
+      const camAlpha = expDampingAlpha(CAMERA_SMOOTH_RATE, dt);
+      camera.position.x += (camTargetX - camera.position.x) * camAlpha;
+      camera.position.z += (camTargetZ - camera.position.z) * camAlpha;
       camera.position.y = 18;
       camera.lookAt(
         playerPosRef.current.x,
@@ -2538,8 +2591,8 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       // ---- Fireflies ----
       const pp = particleGeo.attributes.position.array as Float32Array;
       for (let i = 0; i < particleCount; i++) {
-        pp[i * 3 + 1] += Math.sin(elapsed * pSpeeds[i] + i) * 0.003;
-        pp[i * 3] += Math.sin(elapsed * 0.2 + i * 0.5) * 0.002;
+        pp[i * 3 + 1] += Math.sin(elapsed * pSpeeds[i] + i) * 0.18 * dt;
+        pp[i * 3] += Math.sin(elapsed * 0.2 + i * 0.5) * 0.12 * dt;
       }
       particleGeo.attributes.position.needsUpdate = true;
 
@@ -2577,8 +2630,8 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       // ---- Chimney smoke ----
       const sp = smokeGeo.attributes.position.array as Float32Array;
       for (let i = 0; i < smokeCount; i++) {
-        sp[i * 3 + 1] += smokeSpeeds[i]; // rise
-        sp[i * 3] += Math.sin(elapsed + i) * 0.002; // drift
+        sp[i * 3 + 1] += smokeSpeeds[i] * dt; // rise
+        sp[i * 3] += Math.sin(elapsed + i) * 0.12 * dt; // drift
         // Reset when too high
         if (sp[i * 3 + 1] > 10) {
           const cp = chimneyPositions[i % chimneyPositions.length];
@@ -2592,7 +2645,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       // ---- Fountain water drops ----
       const dp = dropGeo.attributes.position.array as Float32Array;
       for (let i = 0; i < dropCount; i++) {
-        dp[i * 3 + 1] -= dropSpeeds[i]; // fall
+        dp[i * 3 + 1] -= dropSpeeds[i] * dt; // fall
         const a = (i / dropCount) * Math.PI * 2;
         const radius = 0.3 + (2.0 - dp[i * 3 + 1]) * 0.3; // spread as they fall
         dp[i * 3] = -3.5 + Math.cos(a + elapsed * 0.5) * radius;
@@ -2614,13 +2667,15 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       renderer.render(screenScene, screenCam);
     };
 
-    animate();
+    animFrameRef.current = requestAnimationFrame(animate);
 
     // ====== CLEANUP ======
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearHeldInputs);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("resize", onResize);
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
