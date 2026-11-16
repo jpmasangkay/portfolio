@@ -9,7 +9,7 @@ const BgMusic = () => {
 
   useEffect(() => {
     const audio = new Audio();
-    audio.src = "/bgm.webm";
+    audio.src = `${import.meta.env.BASE_URL}bgm.webm`;
     audio.loop = true;
     audio.volume = BGM_VOLUME;
     audio.preload = "none";

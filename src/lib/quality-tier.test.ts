@@ -18,9 +18,8 @@ describe("quality-tier", () => {
       resolutionScale: 1.0,
     });
 
-    // Helper to feed slow 50ms frames until one tier transition triggers (up to 4s)
     const feedSlowWindow = () => {
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < 120; i++) {
         const res = monitor.recordFrame(50);
         if (res !== null) return res;
       }
@@ -59,16 +58,56 @@ describe("quality-tier", () => {
       resolutionScale: 0.65,
     });
 
-    // Further slow frames stay at tier 4
     expect(feedSlowWindow()).toBeNull();
     expect(monitor.getTier()).toBe(4);
   });
 
-  it("ignores huge tab-resume stalls and transient single-frame spikes", () => {
+  it("recovers slowly after sustained good frames and stays hysteresis-stable in deadband", () => {
     const monitor = new QualityMonitor();
-    // Single 1500ms wakeup stall must be ignored
+    // Drop down to tier 2
+    for (let i = 0; i < 200 && monitor.getTier() < 2; i++) {
+      monitor.recordFrame(50);
+    }
+    expect(monitor.getTier()).toBe(2);
+
+    // 3 seconds of 16ms frames must NOT yet recover (recovery requires 6s delay)
+    for (let i = 0; i < 180; i++) {
+      expect(monitor.recordFrame(16.6)).toBeNull();
+    }
+    expect(monitor.getTier()).toBe(2);
+
+    // Continuing smooth 16ms frames past ~6.5s recovers 2 -> 1
+    let recovered: number | null = null;
+    for (let i = 0; i < 300; i++) {
+      const res = monitor.recordFrame(16.6);
+      if (res !== null) {
+        recovered = res;
+        break;
+      }
+    }
+    expect(recovered).toBe(1);
+
+    // Deadband frames (30ms) right after recovery must not bounce back down to 2
+    for (let i = 0; i < 200; i++) {
+      expect(monitor.recordFrame(30)).toBeNull();
+    }
+    expect(monitor.getTier()).toBe(1);
+  });
+
+  it("ignores one-off stalls, resize/modal suppress windows, and transient spikes", () => {
+    const monitor = new QualityMonitor();
+    // Single 1500ms tab-wakeup stall or 220ms GC spike must be ignored
     expect(monitor.recordFrame(1500)).toBeNull();
-    // Two brief 60ms spikes followed by smooth 16ms frames must stay at tier 0
+    expect(monitor.recordFrame(220)).toBeNull();
+
+    // Suppress window (e.g. resize / modal close) ignores elevated 90ms jitter during grace period
+    monitor.suppressFor(0.8);
+    for (let i = 0; i < 15; i++) {
+      expect(monitor.recordFrame(90)).toBeNull();
+    }
+    expect(monitor.getTier()).toBe(0);
+
+    // Brief 60ms spike followed by smooth frames never downgrades
     monitor.recordFrame(60);
     monitor.recordFrame(60);
     for (let i = 0; i < 60; i++) {

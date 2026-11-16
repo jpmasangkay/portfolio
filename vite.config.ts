@@ -5,6 +5,8 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Relative base ensures the single build works on both root Vercel ("/") and GitHub Pages ("/portfolio/")
+  base: "./",
   server: {
     host: "::",
     port: 8080,

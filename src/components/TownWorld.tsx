@@ -127,6 +127,7 @@ const TownWorld = ({
   const exitRequestFnRef = useRef<(() => void) | null>(null);
   const enterInteriorFnRef = useRef<((id: InteriorId) => void) | null>(null);
   const syncQualityFnRef = useRef<((low: boolean) => void) | null>(null);
+  const suppressQualityFnRef = useRef<((seconds: number) => void) | null>(null);
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen || paused);
   const pausedRef = useRef(paused);
@@ -191,13 +192,17 @@ const TownWorld = ({
     }
   }, [exitInteriorSignal]);
 
-  // Keep modalOpen / paused ref in sync and release held inputs when paused or modal opens
+  // Keep modalOpen / paused ref in sync, release held inputs, and suppress quality monitor across modal/pause transitions
   useEffect(() => {
-    modalOpenRef.current = modalOpen || paused;
+    const nextSuspended = modalOpen || paused;
+    const wasSuspended = modalOpenRef.current;
+    modalOpenRef.current = nextSuspended;
     pausedRef.current = paused;
-    if (modalOpen || paused) {
+    if (nextSuspended) {
       keysRef.current.clear();
       setMobileDir(0, 0);
+    } else if (wasSuspended) {
+      suppressQualityFnRef.current?.(0.8);
     }
   }, [modalOpen, paused]);
 
@@ -3230,7 +3235,12 @@ const TownWorld = ({
       setMobileDir(0, 0);
     };
     const onVisibilityChange = () => {
-      if (document.hidden) clearHeldInputs();
+      if (document.hidden) {
+        clearHeldInputs();
+      } else {
+        lastTime = performance.now();
+        qualityMonitor.suppressFor(0.8);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -3272,8 +3282,12 @@ const TownWorld = ({
       qualityMonitor.reset();
       applyQualityProfile(low ? 4 : 0);
     };
+    suppressQualityFnRef.current = (seconds: number) => {
+      qualityMonitor.suppressFor(seconds);
+    };
 
     const onResize = () => {
+      qualityMonitor.suppressFor(0.8);
       const w = window.innerWidth;
       const h = window.innerHeight;
       const f = computeOrthoFrustum(w, h, 12);
