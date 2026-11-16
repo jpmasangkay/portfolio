@@ -43,6 +43,17 @@
     height: 100dvh;
   }
 
+  /* When JavaScript is disabled or root hasn't mounted, allow noscript fallback to scroll freely */
+  #root:empty {
+    display: none;
+  }
+  html:has(#root:empty),
+  body:has(#root:empty) {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'MedievalSharp', 'Space Grotesk', sans-serif;

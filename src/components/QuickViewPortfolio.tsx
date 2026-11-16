@@ -19,6 +19,7 @@ const sectionCardStyle: React.CSSProperties = {
   background: "hsl(252, 18%, 11%)",
   border: "1px solid hsl(250, 15%, 22%)",
   padding: "20px",
+  scrollMarginTop: 118,
 };
 
 const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
@@ -364,8 +365,15 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
         </section>
 
         {/* Skills */}
-        <section id="qv-skills" style={sectionCardStyle}>
+        <section
+          id="qv-skills"
+          tabIndex={0}
+          aria-labelledby="qv-skills-heading"
+          className="qv-focus-section"
+          style={sectionCardStyle}
+        >
           <h2
+            id="qv-skills-heading"
             style={{
               fontFamily: "'Press Start 2P', cursive",
               fontSize: 12,
@@ -610,6 +618,12 @@ const QuickViewPortfolio = ({ onBackToWorld }: QuickViewPortfolioProps) => {
         onChangeIndex={setLightboxIdx}
       />
       <style>{`
+        .qv-focus-section:focus-visible,
+        #quick-view-page a:focus-visible,
+        #quick-view-page button:focus-visible {
+          outline: 2px solid hsl(38, 85%, 55%);
+          outline-offset: 2px;
+        }
         @media (max-width: 1260px) {
           .qv-header-inner {
             padding-left: 112px !important;

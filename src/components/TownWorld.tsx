@@ -8,6 +8,7 @@ import {
   clampDeltaSec,
   computeOrthoFrustum,
   expDampingAlpha,
+  findSafePosition,
   resolvePlayerStep,
   type ColliderBox,
   type WorldBounds,
@@ -312,19 +313,19 @@ const TownWorld = ({
 
     // Zone 1 Ground: Whispering Forest (West)
     const forestFloor = new THREE.Mesh(
-      new THREE.BoxGeometry(20, 0.4, 34),
+      new THREE.BoxGeometry(24, 0.4, 62),
       new THREE.MeshLambertMaterial({ color: 0x263f2a })
     );
-    forestFloor.position.set(-28, -0.22, 1);
+    forestFloor.position.set(-26, -0.22, -6);
     forestFloor.receiveShadow = true;
     scene.add(forestFloor);
 
     // Zone 2 Ground: Moonlit Lakeside Shore (East)
     const shoreFloor = new THREE.Mesh(
-      new THREE.BoxGeometry(20, 0.4, 34),
+      new THREE.BoxGeometry(24, 0.4, 62),
       new THREE.MeshLambertMaterial({ color: 0x334d34 })
     );
-    shoreFloor.position.set(28, -0.22, 0);
+    shoreFloor.position.set(26, -0.22, -6);
     shoreFloor.receiveShadow = true;
     scene.add(shoreFloor);
 
@@ -332,7 +333,7 @@ const TownWorld = ({
     const hillMat = new THREE.MeshLambertMaterial({ color: 0x454952 });
     for (let stepIdx = 0; stepIdx < 4; stepIdx++) {
       const stepY = (stepIdx + 1) * 0.15;
-      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.16, 1.05), hillMat);
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.16, 1.05), hillMat);
       stepMesh.position.set(0, stepY - 0.08, -19 - stepIdx);
       stepMesh.receiveShadow = true;
       scene.add(stepMesh);
@@ -1173,7 +1174,7 @@ const TownWorld = ({
       scene.add(group);
 
       // Collision bounds (AABB)
-      const pad = 0.5;
+      const pad = 0.25;
       if (isOpenGate) {
         // Gate piers & flanking guard towers leave the central road archway walkable
         addCollider(b.x - 4.2, b.x - 1.35, b.z - b.d / 2 - pad, b.z + b.d / 2 + pad, "gate-west");
@@ -1681,8 +1682,8 @@ const TownWorld = ({
     bridgeDeck.position.set(5, 0.3, -5);
     scene.add(bridgeDeck);
     // Pond water colliders flanking the walkable bridge deck (x in [4.25, 5.75])
-    addCollider(2.9, 4.15, -7.0, -3.0, "pond-west");
-    addCollider(5.85, 8.2, -7.0, -3.0, "pond-east-pier");
+    addCollider(2.7, 3.9, -7.0, -3.0, "pond-west");
+    addCollider(6.1, 8.3, -7.0, -3.0, "pond-east-pier");
     // Bridge railings
     for (let side = -1; side <= 1; side += 2) {
       for (let pz = -2; pz <= 2; pz += 1) {
@@ -2571,6 +2572,22 @@ const TownWorld = ({
     addPine(9, -25, 3.6);
     addOak(-9, -32, 3.2);
     addPine(9, -32, 3.8);
+    // Hilltop cliff colliders & stone rim curbs (only the central staircase |x| <= 2.2 is walkable)
+    const addHillCurb = (cx: number, cz: number, cw: number, cd: number) => {
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(cw, 0.28, cd), ruinStoneMat);
+      curb.position.set(cx, 0.74, cz);
+      curb.castShadow = true;
+      curb.receiveShadow = true;
+      scene.add(curb);
+    };
+    addHillCurb(-7.75, -22.75, 10.9, 0.5);
+    addHillCurb(7.75, -22.75, 10.9, 0.5);
+    addHillCurb(-13.0, -29.5, 0.5, 13.8);
+    addHillCurb(13.0, -29.5, 0.5, 13.8);
+    addCollider(-13.5, -2.2, -23.0, -22.2, "hill-cliff-sw");
+    addCollider(2.2, 13.5, -23.0, -22.2, "hill-cliff-se");
+    addCollider(-13.5, -12.7, -36.5, -22.2, "hill-cliff-w");
+    addCollider(12.7, 13.5, -36.5, -22.2, "hill-cliff-e");
 
     // ====== VILLAGERS (8 idle & patrolling townsfolk) ======
     interface VillagerRuntime {
@@ -3214,6 +3231,9 @@ const TownWorld = ({
       onNearVillagerRef.current?.(null);
       onNearSecretRef.current?.(null);
       snapCameraAndFamiliar();
+      lastEmittedX = roomCenterX;
+      lastEmittedZ = 74.2;
+      onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
       onInteriorChangeRef.current?.(id);
     };
 
@@ -3222,15 +3242,30 @@ const TownWorld = ({
       currentInteriorRef.current = null;
       nearInteriorActionRef.current = null;
       onNearInteriorActionRef.current?.(null);
-      const fallback =
+      const preferredDoorPos =
         prevId === "tavern"
-          ? { x: -8, z: 11.4 }
+          ? { x: -8, z: 11.9 }
           : prevId === "wizard"
-          ? { x: 0, z: -6.8 }
+          ? { x: 0, z: -5.9 }
           : savedOutdoorPosRef.current;
-      playerPosRef.current.set(fallback.x, 0, fallback.z);
+      const npcExitColliders: ColliderBox[] = villagerRuntimes.map((vr) => ({
+        minX: vr.x - 0.35,
+        maxX: vr.x + 0.35,
+        minZ: vr.z - 0.35,
+        maxZ: vr.z + 0.35,
+        label: vr.def.id,
+      }));
+      const safeExitPos = findSafePosition(
+        preferredDoorPos,
+        colliders.concat(npcExitColliders),
+        EXPANDED_WORLD_BOUNDS
+      );
+      playerPosRef.current.set(safeExitPos.x, 0, safeExitPos.z);
       playerGroup.rotation.y = 0;
       snapCameraAndFamiliar();
+      lastEmittedX = safeExitPos.x;
+      lastEmittedZ = safeExitPos.z;
+      onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
       onInteriorChangeRef.current?.(null);
     };
 
@@ -3440,17 +3475,17 @@ const TownWorld = ({
             currentZoneRef.current = detectedZone;
             onZoneChangeRef.current?.(detectedZone);
           }
+        }
 
-          if (
-            now - lastPosEmitTime > 110 &&
-            (Math.abs(playerPosRef.current.x - lastEmittedX) > 0.15 ||
-              Math.abs(playerPosRef.current.z - lastEmittedZ) > 0.15)
-          ) {
-            lastPosEmitTime = now;
-            lastEmittedX = playerPosRef.current.x;
-            lastEmittedZ = playerPosRef.current.z;
-            onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
-          }
+        if (
+          now - lastPosEmitTime > 110 &&
+          (Math.abs(playerPosRef.current.x - lastEmittedX) > 0.15 ||
+            Math.abs(playerPosRef.current.z - lastEmittedZ) > 0.15)
+        ) {
+          lastPosEmitTime = now;
+          lastEmittedX = playerPosRef.current.x;
+          lastEmittedZ = playerPosRef.current.z;
+          onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
         }
       } else {
         sweepDone = true;

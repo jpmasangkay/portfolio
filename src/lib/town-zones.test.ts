@@ -11,9 +11,10 @@ describe("town-zones and villagers", () => {
     expect(Object.keys(ZONE_METADATA)).toEqual(["town", "forest", "lakeside", "ruins"]);
   });
 
-  it("ramps elevation smoothly up to the ruined hilltop", () => {
+  it("ramps elevation smoothly up to the ruined hilltop only along the central stairs", () => {
     expect(getGroundElevation(0, 0)).toBe(0);
     expect(getGroundElevation(0, -20.5)).toBeCloseTo(0.3, 4);
+    expect(getGroundElevation(6, -20.5)).toBe(0);
     expect(getGroundElevation(0, -25)).toBe(0.6);
   });
 

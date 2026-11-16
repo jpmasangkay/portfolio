@@ -3,6 +3,7 @@ import {
   clampDeltaSec,
   computeOrthoFrustum,
   expDampingAlpha,
+  findSafePosition,
   isPositionBlocked,
   MAX_FRAME_DELTA_SEC,
   resolvePlayerStep,
@@ -81,5 +82,26 @@ describe("town-physics", () => {
     const portrait = computeOrthoFrustum(390, 844, 12);
     expect(portrait.top).toBeGreaterThan(18);
     expect(portrait.right).toBeGreaterThan(9);
+  });
+
+  it("allows escaping a pre-existing collider overlap without trapping the player", () => {
+    const npc: ColliderBox[] = [{ minX: -0.35, maxX: 0.35, minZ: -0.35, maxZ: 0.35, label: "npc" }];
+    // Player already overlaps NPC slightly at (0, 0.8) while PLAYER_RADIUS=0.6 (overlap threshold 0.95)
+    expect(isPositionBlocked(0, 0.8, npc)).toBe(true);
+    // Stepping South (+Z, away from NPC center) escapes cleanly
+    const escapeStep = resolvePlayerStep({ x: 0, z: 0.8 }, 0, 1, 1 / 60, npc);
+    expect(escapeStep.z).toBeGreaterThan(0.8);
+    // Stepping North (-Z, deeper into NPC center) remains blocked
+    const deeperStep = resolvePlayerStep({ x: 0, z: 0.8 }, 0, -1, 1 / 60, npc);
+    expect(deeperStep.z).toBe(0.8);
+  });
+
+  it("finds a safe unblocked exit coordinate around buildings and blocking NPCs", () => {
+    const colliders: ColliderBox[] = [
+      { minX: -1.75, maxX: 1.75, minZ: -11.75, maxZ: -8.25, label: "wizard" },
+      { minX: -0.35, maxX: 0.35, minZ: -6.25, maxZ: -5.55, label: "apprentice-pip" },
+    ];
+    const safe = findSafePosition({ x: 0, z: -5.9 }, colliders);
+    expect(isPositionBlocked(safe.x, safe.z, colliders)).toBe(false);
   });
 });

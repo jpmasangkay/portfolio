@@ -68,6 +68,8 @@ export function detectPlayerZone(x: number, z: number): ZoneId {
 export function getGroundElevation(x: number, z: number): number {
   if (z >= -18.5 || Math.abs(x) > 13.5) return 0;
   if (z <= -22.5) return 0.6;
+  // Ramp smoothly only along the central stone staircase so flanking slopes stay at ground level
+  if (Math.abs(x) > 2.2) return 0;
   // Linear ramp from z=-18.5 (y=0) to z=-22.5 (y=0.6)
   const t = (-18.5 - z) / 4.0;
   return Math.max(0, Math.min(0.6, t * 0.6));

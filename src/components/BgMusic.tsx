@@ -2,12 +2,10 @@ import { useRef, useState, useEffect } from "react";
 import { setAudioMuted } from "@/lib/sound-engine";
 
 const BGM_VOLUME = 0.25;
-const USER_MUTED_KEY = "shealtiel_bgm_explicit_mute_v1";
 
 const BgMusic = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const startedRef = useRef(false);
 
   useEffect(() => {
     const audio = new Audio();
@@ -16,41 +14,10 @@ const BgMusic = () => {
     audio.volume = BGM_VOLUME;
     audio.preload = "none";
     audioRef.current = audio;
-
-    // Auto-start music on any user interaction unless explicitly muted previously
-    const startMusic = () => {
-      if (startedRef.current) return;
-      try {
-        if (localStorage.getItem(USER_MUTED_KEY) === "1") return;
-      } catch {
-        // Ignore storage read errors
-      }
-      startedRef.current = true;
-
-      audio
-        .play()
-        .then(() => {
-          setPlaying(true);
-          setAudioMuted(false);
-        })
-        .catch(() => {
-          // Reset so it tries again on next interaction
-          startedRef.current = false;
-        });
-    };
-
-    // Attach listeners to start on ANY user gesture
-    // Use capture phase to fire before anything can stopPropagation
-    document.addEventListener("pointerdown", startMusic, { capture: true });
-    document.addEventListener("touchstart", startMusic, { capture: true });
-    document.addEventListener("click", startMusic, { capture: true });
-    document.addEventListener("keydown", startMusic, { capture: true });
+    // Ensure ambience remains muted until user explicitly opts in via #bgm-toggle
+    setAudioMuted(true);
 
     return () => {
-      document.removeEventListener("pointerdown", startMusic, { capture: true });
-      document.removeEventListener("touchstart", startMusic, { capture: true });
-      document.removeEventListener("click", startMusic, { capture: true });
-      document.removeEventListener("keydown", startMusic, { capture: true });
       audio.pause();
       audio.src = "";
       audioRef.current = null;
@@ -66,17 +33,7 @@ const BgMusic = () => {
       audio.pause();
       setPlaying(false);
       setAudioMuted(true);
-      try {
-        localStorage.setItem(USER_MUTED_KEY, "1");
-      } catch {
-        // Ignore storage errors
-      }
     } else {
-      try {
-        localStorage.setItem(USER_MUTED_KEY, "0");
-      } catch {
-        // Ignore storage errors
-      }
       audio
         .play()
         .then(() => {
