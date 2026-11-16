@@ -1,27 +1,34 @@
 import { useState } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
+import type { VillagerDef } from "@/data/villagers";
 import { triggerMobileInteract } from "@/lib/mobile-input";
 import {
   TOWN_BUILDINGS_LAYOUT,
   findNearestUnvisitedBuilding,
 } from "@/lib/town-buildings";
+import { ZONE_METADATA, type ZoneId } from "@/lib/town-zones";
 import MobileThumbstick from "@/components/MobileThumbstick";
 
 interface TownOverlayProps {
   nearBuilding: { id: BuildingId; name: string; emoji: string } | null;
+  nearVillager?: VillagerDef | null;
+  greetedByRowan?: boolean;
+  currentZone?: ZoneId;
+  zoneTransitioning?: boolean;
   modalOpen: boolean;
   visitedBuildings: ReadonlySet<BuildingId>;
   playerPos: { x: number; z: number };
   onSelectBuilding: (buildingId: BuildingId) => void;
   onToggleQuickView: () => void;
+  onOpenQuestLog?: () => void;
 }
 
 function toMinimapCoords(x: number, z: number): { mx: number; my: number } {
   // Isometric projection so minimap UP matches pressing W / screen UP
   const isoX = (x - z) * Math.SQRT1_2;
   const isoY = (x + z) * Math.SQRT1_2;
-  // Town spans roughly [-20..20] -> iso range approx [-24..24]
-  const scale = 1.9;
+  // Expanded realm spans roughly [-35..35], scale 1.25 fits outskirts & town inside 108x108
+  const scale = 1.25;
   return {
     mx: 54 + isoX * scale,
     my: 54 + isoY * scale,
@@ -30,11 +37,16 @@ function toMinimapCoords(x: number, z: number): { mx: number; my: number } {
 
 const TownOverlay = ({
   nearBuilding,
+  nearVillager = null,
+  greetedByRowan = true,
+  currentZone = "town",
+  zoneTransitioning = false,
   modalOpen,
   visitedBuildings,
   playerPos,
   onSelectBuilding,
   onToggleQuickView,
+  onOpenQuestLog,
 }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -42,6 +54,8 @@ const TownOverlay = ({
 
   const visitedCount = visitedBuildings.size;
   const totalCount = TOWN_BUILDINGS_LAYOUT.length;
+  const zoneMeta = ZONE_METADATA[currentZone];
+  const hasInteractTarget = Boolean(nearBuilding || nearVillager);
   const nearestUnvisited = findNearestUnvisitedBuilding(
     playerPos.x,
     playerPos.z,
@@ -126,6 +140,9 @@ const TownOverlay = ({
   return (
     <div
       id="town-overlay"
+      data-zone={currentZone}
+      data-player-x={playerPos.x.toFixed(2)}
+      data-player-z={playerPos.z.toFixed(2)}
       style={{
         position: "fixed",
         top: 0,
@@ -136,7 +153,22 @@ const TownOverlay = ({
         pointerEvents: "none",
       }}
     >
-      {/* Title + Subtitle */}
+      {/* Zone transition fog-fade vignette */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 8,
+          background:
+            "radial-gradient(circle at 50% 50%, hsla(255, 30%, 8%, 0.25) 0%, hsla(255, 35%, 6%, 0.88) 85%)",
+          opacity: zoneTransitioning ? 1 : 0,
+          transition: "opacity 0.35s ease",
+        }}
+      />
+
+      {/* Title + Subtitle + Zone indicator */}
       <div className="realm-header">
         <p
           style={{
@@ -164,9 +196,26 @@ const TownOverlay = ({
         >
           Shealtiel Masangkay · CS &amp; Web Developer ({visitedCount}/{totalCount} visited)
         </p>
+        <div style={{ marginTop: 4 }}>
+          <span
+            id="zone-indicator"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10.5,
+              color: "hsl(150, 50%, 66%)",
+              background: "hsla(255, 22%, 8%, 0.72)",
+              border: "1px solid hsla(150, 35%, 36%, 0.55)",
+              padding: "2px 8px",
+              display: "inline-block",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {zoneMeta.emoji} {zoneMeta.name} — {zoneMeta.subtitle}
+          </span>
+        </div>
       </div>
 
-      {/* Top-right Quick View Toggle + Nearest Unvisited Compass (Desktop & Mobile) */}
+      {/* Top-right Quest Log + Quick View Toggle + Mobile MAP + Nearest Unvisited Compass */}
       <div
         className="top-right-hud"
         style={{
@@ -180,17 +229,54 @@ const TownOverlay = ({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {onOpenQuestLog && (
+            <button
+              type="button"
+              id="quest-log-toggle"
+              onClick={onOpenQuestLog}
+              aria-label={`Open Quest Log (${visitedCount} of ${totalCount} visited)`}
+              className="top-hud-btn"
+              style={{
+                fontFamily: "'Press Start 2P', cursive",
+                fontSize: "7.5px",
+                color:
+                  visitedCount >= totalCount
+                    ? "hsl(150, 60%, 65%)"
+                    : "hsl(40, 25%, 90%)",
+                background: "hsla(255, 20%, 8%, 0.9)",
+                border:
+                  visitedCount >= totalCount
+                    ? "1px solid hsla(150, 55%, 45%, 0.75)"
+                    : "1px solid hsla(250, 15%, 32%, 0.75)",
+                padding: "8px 10px",
+                cursor: "pointer",
+                borderRadius: 2,
+                whiteSpace: "nowrap",
+                boxShadow: "0 0 10px rgba(0,0,0,0.45)",
+                transition: "border-color 0.15s ease, background 0.15s ease",
+              }}
+            >
+              <span className="hide-mobile">
+                📒 Quests ({visitedCount}/{totalCount})
+              </span>
+              <span className="show-mobile-inline">
+                📒 {visitedCount}/{totalCount}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             id="quick-view-toggle"
             onClick={onToggleQuickView}
+            className="top-hud-btn"
             style={{
               fontFamily: "'Press Start 2P', cursive",
               fontSize: "7.5px",
               color: "hsl(40, 25%, 90%)",
               background: "hsla(255, 20%, 8%, 0.9)",
               border: "1px solid hsla(38, 85%, 55%, 0.55)",
-              padding: "8px 11px",
+              padding: "8px 10px",
               cursor: "pointer",
               borderRadius: 2,
               whiteSpace: "nowrap",
@@ -203,7 +289,7 @@ const TownOverlay = ({
 
           <button
             type="button"
-            className="show-mobile"
+            className="show-mobile top-hud-btn"
             onClick={() => setGuideOpen(!guideOpen)}
             style={{
               alignItems: "center",
@@ -214,7 +300,7 @@ const TownOverlay = ({
               border: guideOpen
                 ? "1px solid hsl(38, 85%, 55%)"
                 : "1px solid hsla(250, 15%, 30%, 0.7)",
-              padding: "8px 10px",
+              padding: "8px 9px",
               fontFamily: "'Press Start 2P', cursive",
               fontSize: "7.5px",
               color: guideOpen ? "hsl(38, 85%, 55%)" : "hsl(40, 20%, 82%)",
@@ -321,8 +407,8 @@ const TownOverlay = ({
         )}
       </div>
 
-      {/* Interaction prompt */}
-      {nearBuilding && (
+      {/* Interaction prompt (matches TownWorld priority: villager within 2.6u, otherwise building) */}
+      {(nearVillager || nearBuilding) && (
         <div
           id="interaction-prompt"
           style={{
@@ -338,7 +424,9 @@ const TownOverlay = ({
           <div
             style={{
               background: "hsla(255, 20%, 7%, 0.92)",
-              border: "2px solid hsl(38, 85%, 55%)",
+              border: nearVillager
+                ? "2px solid hsl(150, 55%, 50%)"
+                : "2px solid hsl(38, 85%, 55%)",
               padding: "12px 24px",
               boxShadow:
                 "3px 3px 0 rgba(0,0,0,0.5), 0 0 20px hsla(38, 85%, 55%, 0.2)",
@@ -352,20 +440,38 @@ const TownOverlay = ({
                 marginBottom: 4,
               }}
             >
-              {nearBuilding.emoji} {nearBuilding.name}
+              {nearVillager
+                ? `${nearVillager.emoji} ${nearVillager.name} — ${nearVillager.role}`
+                : `${nearBuilding?.emoji} ${nearBuilding?.name}`}
             </p>
+            {nearVillager?.isGreeter && !greetedByRowan && (
+              <p
+                style={{
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: "12px",
+                  color: "hsl(40, 25%, 86%)",
+                  marginBottom: 5,
+                }}
+              >
+                Welcome! Walk with WASD / Thumbstick — talk with me for controls &amp; tips.
+              </p>
+            )}
             <p
               style={{
                 fontFamily: "'Press Start 2P', cursive",
                 fontSize: "clamp(6px, 1.5vw, 8px)",
-                color: "hsl(38, 85%, 55%)",
+                color: nearVillager ? "hsl(150, 60%, 60%)" : "hsl(38, 85%, 55%)",
                 letterSpacing: "0.1em",
               }}
             >
               <span className="hide-mobile">
-                PRESS [E] OR [SPACE] TO ENTER
+                {nearVillager
+                  ? "PRESS [E] OR [SPACE] TO TALK"
+                  : "PRESS [E] OR [SPACE] TO ENTER"}
               </span>
-              <span className="show-mobile">TAP ⚔️ TO ENTER</span>
+              <span className="show-mobile">
+                {nearVillager ? "TAP ⚔️ TO TALK" : "TAP ⚔️ TO ENTER"}
+              </span>
             </p>
           </div>
         </div>
@@ -431,9 +537,49 @@ const TownOverlay = ({
         >
           <svg width={108} height={108} viewBox="0 0 108 108" role="img" aria-label="Town minimap showing visited and unvisited buildings">
             <rect x={0} y={0} width={108} height={108} fill="#121428" stroke="#2d3048" strokeWidth={1} />
-            {/* Isometric road hints */}
-            <line x1={54} y1={14} x2={54} y2={94} stroke="#3c3740" strokeWidth={3} strokeDasharray="2 2" opacity={0.45} />
-            <line x1={14} y1={54} x2={94} y2={54} stroke="#3c3740" strokeWidth={3} strokeDasharray="2 2" opacity={0.45} />
+            {/* Isometric road hints across town & outskirts */}
+            {(() => {
+              const nEnd = toMinimapCoords(0, -28);
+              const sEnd = toMinimapCoords(0, 18);
+              const wEnd = toMinimapCoords(-30, 0);
+              const eEnd = toMinimapCoords(30, 0);
+              const forest = toMinimapCoords(-27, 0);
+              const lakeside = toMinimapCoords(27, 0);
+              const ruins = toMinimapCoords(0, -27);
+              return (
+                <>
+                  <line
+                    x1={nEnd.mx}
+                    y1={nEnd.my}
+                    x2={sEnd.mx}
+                    y2={sEnd.my}
+                    stroke="#3c3740"
+                    strokeWidth={2.5}
+                    strokeDasharray="2 2"
+                    opacity={0.55}
+                  />
+                  <line
+                    x1={wEnd.mx}
+                    y1={wEnd.my}
+                    x2={eEnd.mx}
+                    y2={eEnd.my}
+                    stroke="#3c3740"
+                    strokeWidth={2.5}
+                    strokeDasharray="2 2"
+                    opacity={0.55}
+                  />
+                  <circle cx={forest.mx} cy={forest.my} r={3} fill="#25543e" opacity={0.85}>
+                    <title>Whispering Forest (West)</title>
+                  </circle>
+                  <circle cx={lakeside.mx} cy={lakeside.my} r={3} fill="#2a6b9e" opacity={0.85}>
+                    <title>Moonlit Lakeside (East)</title>
+                  </circle>
+                  <circle cx={ruins.mx} cy={ruins.my} r={3} fill="#9e5a34" opacity={0.85}>
+                    <title>Ruined Hilltop (North)</title>
+                  </circle>
+                </>
+              );
+            })()}
             {/* Building pins */}
             {TOWN_BUILDINGS_LAYOUT.map((b) => {
               const { mx, my } = toMinimapCoords(b.x, b.z);
@@ -534,7 +680,7 @@ const TownOverlay = ({
       >
         <button
           type="button"
-          aria-label="Interact with nearby building"
+          aria-label={nearVillager ? "Talk to nearby villager" : "Interact with nearby building"}
           onPointerDown={(e) => {
             e.preventDefault();
             triggerMobileInteract();
@@ -547,14 +693,18 @@ const TownOverlay = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: nearBuilding
+            background: hasInteractTarget
               ? "hsla(38, 85%, 55%, 0.3)"
               : "hsla(255, 20%, 10%, 0.6)",
-            border: nearBuilding
-              ? "3px solid hsl(38, 85%, 55%)"
+            border: hasInteractTarget
+              ? nearVillager
+                ? "3px solid hsl(150, 55%, 50%)"
+                : "3px solid hsl(38, 85%, 55%)"
               : "2px solid hsla(250, 15%, 25%, 0.5)",
-            color: nearBuilding
-              ? "hsl(38, 85%, 55%)"
+            color: hasInteractTarget
+              ? nearVillager
+                ? "hsl(150, 60%, 60%)"
+                : "hsl(38, 85%, 55%)"
               : "hsl(250, 10%, 45%)",
             fontFamily: "'Press Start 2P', cursive",
             fontSize: "20px",
@@ -563,7 +713,7 @@ const TownOverlay = ({
             userSelect: "none",
             WebkitUserSelect: "none",
             WebkitTapHighlightColor: "transparent",
-            boxShadow: nearBuilding
+            boxShadow: hasInteractTarget
               ? "0 0 15px hsla(38, 85%, 55%, 0.4)"
               : "none",
             transition: "all 0.2s ease",
@@ -599,6 +749,7 @@ const TownOverlay = ({
           transform: translateX(-2px);
         }
         .guide-item-btn:focus-visible,
+        #quest-log-toggle:focus-visible,
         #quick-view-toggle:focus-visible,
         #unvisited-compass:focus-visible {
           outline: 2px solid hsl(38, 85%, 55%);
@@ -616,9 +767,13 @@ const TownOverlay = ({
             top: 8px;
             right: 8px;
           }
+          .top-hud-btn {
+            font-size: 7px !important;
+            padding: 7px 7px !important;
+          }
           .compass-anchor {
             position: fixed;
-            top: 90px;
+            top: 112px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 19;

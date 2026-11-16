@@ -16,11 +16,23 @@ import {
   TOWN_BUILDINGS_LAYOUT,
   type TownBuildingLayout,
 } from "@/lib/town-buildings";
+import {
+  EXPANDED_WORLD_BOUNDS,
+  ZONE_METADATA,
+  detectPlayerZone,
+  getGroundElevation,
+  type ZoneId,
+} from "@/lib/town-zones";
+import { VILLAGERS, type VillagerDef } from "@/data/villagers";
 
 interface TownWorldProps {
   onInteract: (buildingId: BuildingId) => void;
   onNearBuilding: (building: { id: BuildingId; name: string; emoji: string } | null) => void;
+  onTalkVillager?: (villager: VillagerDef) => void;
+  onNearVillager?: (villager: VillagerDef | null) => void;
+  onZoneChange?: (zone: ZoneId) => void;
   onPlayerPosChange?: (pos: { x: number; z: number }) => void;
+  cloakEquipped?: boolean;
   modalOpen: boolean;
   paused?: boolean;
 }
@@ -29,27 +41,45 @@ type BuildingDef = TownBuildingLayout;
 const BUILDINGS: BuildingDef[] = TOWN_BUILDINGS_LAYOUT;
 
 const INTERACT_DISTANCE = 4.5;
+const VILLAGER_INTERACT_DISTANCE = 2.6;
 const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
 
 const TownWorld = ({
   onInteract,
   onNearBuilding,
+  onTalkVillager,
+  onNearVillager,
+  onZoneChange,
   onPlayerPosChange,
+  cloakEquipped = false,
   modalOpen,
   paused = false,
 }: TownWorldProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const playerPosRef = useRef(new THREE.Vector3(0, 0, 7.0));
+  const playerPosRef = useRef(new THREE.Vector3(0, 0, 8.0));
   const nearBuildingRef = useRef<BuildingDef | null>(null);
+  const nearVillagerRef = useRef<VillagerDef | null>(null);
+  const currentZoneRef = useRef<ZoneId>("town");
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen || paused);
   const pausedRef = useRef(paused);
+  const cloakEquippedRef = useRef(cloakEquipped);
   const onPlayerPosChangeRef = useRef(onPlayerPosChange);
+  const onTalkVillagerRef = useRef(onTalkVillager);
+  const onNearVillagerRef = useRef(onNearVillager);
+  const onZoneChangeRef = useRef(onZoneChange);
 
   useEffect(() => {
     onPlayerPosChangeRef.current = onPlayerPosChange;
-  }, [onPlayerPosChange]);
+    onTalkVillagerRef.current = onTalkVillager;
+    onNearVillagerRef.current = onNearVillager;
+    onZoneChangeRef.current = onZoneChange;
+  }, [onPlayerPosChange, onTalkVillager, onNearVillager, onZoneChange]);
+
+  useEffect(() => {
+    cloakEquippedRef.current = cloakEquipped;
+  }, [cloakEquipped]);
 
   // Keep modalOpen / paused ref in sync and release held inputs when paused or modal opens
   useEffect(() => {
@@ -63,9 +93,14 @@ const TownWorld = ({
 
   const handleInteract = useCallback(() => {
     if (modalOpenRef.current) return;
-    const near = nearBuildingRef.current;
-    if (near) {
-      onInteract(near.id);
+    const nearNpc = nearVillagerRef.current;
+    const nearBld = nearBuildingRef.current;
+    if (nearNpc) {
+      onTalkVillagerRef.current?.(nearNpc);
+      return;
+    }
+    if (nearBld) {
+      onInteract(nearBld.id);
     }
   }, [onInteract]);
 
@@ -137,9 +172,9 @@ const TownWorld = ({
     const pathMat = new THREE.MeshLambertMaterial({ color: 0x8a7a68 });
     const waterMat = new THREE.MeshLambertMaterial({ color: 0x3366cc, transparent: true, opacity: 0.7 });
 
-    // ====== GROUND (multi-layered + outer horizon meadow to eliminate void) ======
+    // ====== GROUND (multi-layered + outer horizon meadow + outskirt zones) ======
     const outerMeadow = new THREE.Mesh(
-      new THREE.BoxGeometry(160, 0.4, 160),
+      new THREE.BoxGeometry(200, 0.4, 200),
       new THREE.MeshLambertMaterial({ color: 0x22301e })
     );
     outerMeadow.position.y = -0.58;
@@ -159,6 +194,41 @@ const TownWorld = ({
     ground.position.y = -0.25;
     ground.receiveShadow = true;
     scene.add(ground);
+
+    // Zone 1 Ground: Whispering Forest (West)
+    const forestFloor = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 0.4, 34),
+      new THREE.MeshLambertMaterial({ color: 0x263f2a })
+    );
+    forestFloor.position.set(-28, -0.22, 1);
+    forestFloor.receiveShadow = true;
+    scene.add(forestFloor);
+
+    // Zone 2 Ground: Moonlit Lakeside Shore (East)
+    const shoreFloor = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 0.4, 34),
+      new THREE.MeshLambertMaterial({ color: 0x334d34 })
+    );
+    shoreFloor.position.set(28, -0.22, 0);
+    shoreFloor.receiveShadow = true;
+    scene.add(shoreFloor);
+
+    // Zone 3 Ground: Ruined Hilltop Stepped Ramp + Plateau (North)
+    const hillMat = new THREE.MeshLambertMaterial({ color: 0x454952 });
+    for (let stepIdx = 0; stepIdx < 4; stepIdx++) {
+      const stepY = (stepIdx + 1) * 0.15;
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.16, 1.05), hillMat);
+      stepMesh.position.set(0, stepY - 0.08, -19 - stepIdx);
+      stepMesh.receiveShadow = true;
+      scene.add(stepMesh);
+    }
+    const hilltopPlateau = new THREE.Mesh(
+      new THREE.BoxGeometry(26, 0.8, 14),
+      new THREE.MeshLambertMaterial({ color: 0x344234 })
+    );
+    hilltopPlateau.position.set(0, 0.2, -29.5);
+    hilltopPlateau.receiveShadow = true;
+    scene.add(hilltopPlateau);
     // Lighter grass patches (varied terrain)
     const lightGrassMat = new THREE.MeshLambertMaterial({ color: 0x4c653f });
     const darkGrassMat = new THREE.MeshLambertMaterial({ color: 0x2f4126 });
@@ -1139,7 +1209,7 @@ const TownWorld = ({
     addPine(-12, 4);
     addOak(14, 5, 4);
     addBirch(13, -3);
-    addPine(-13, -1, 3.5);
+    addPine(-13, -6, 3.5);
     addBirch(-6, -10, 2.5);
     addOak(6, -12);
     addPine(-15, 10, 4);
@@ -1154,15 +1224,14 @@ const TownWorld = ({
     addBirch(16, -8, 2.5);
     addOak(-8, 14, 3);
 
-    // Outer perimeter forest silhouettes (frame town edge and eliminate void)
+    // Outer perimeter forest silhouettes (outside walkable zones to frame the horizon)
     const outerTreeSpots: [number, number, "oak" | "pine", number][] = [
       [-23, 24, "pine", 4.2], [-18, 26, "oak", 3.4], [-12, 24, "pine", 3.8], [-6, 25, "pine", 4.0],
       [6, 25, "oak", 3.6], [13, 24, "pine", 4.2], [20, 22, "oak", 3.5], [24, 16, "pine", 4.4],
-      [-25, 16, "oak", 3.6], [-26, 8, "pine", 4.5], [-24, 0, "oak", 3.8], [-25, -9, "pine", 4.2],
-      [-24, -18, "oak", 3.5], [-16, -24, "pine", 4.4], [-8, -23, "oak", 3.4], [8, -24, "pine", 4.2],
-      [17, -23, "oak", 3.8], [24, -17, "pine", 4.0], [25, -8, "oak", 3.6], [24, 3, "pine", 4.2],
-      [-31, 20, "pine", 4.8], [-30, 5, "oak", 4.0], [-29, -12, "pine", 4.6], [30, -14, "pine", 4.5],
-      [29, 10, "oak", 3.8], [-15, 31, "pine", 4.5], [14, 30, "oak", 3.8],
+      [-24, -18, "oak", 3.5], [-18, -24, "pine", 4.4], [18, -23, "oak", 3.8], [24, -17, "pine", 4.0],
+      [-39, 15, "pine", 4.8], [-39, 2, "oak", 4.0], [-38, -10, "pine", 4.6], [41, -14, "pine", 4.5],
+      [41, 10, "oak", 3.8], [-15, 31, "pine", 4.5], [14, 30, "oak", 3.8], [-18, -36, "pine", 4.6],
+      [0, -39, "oak", 4.2], [17, -36, "pine", 4.4],
     ];
     outerTreeSpots.forEach(([ox, oz, kind, oh]) => {
       if (kind === "oak") {
@@ -1221,39 +1290,40 @@ const TownWorld = ({
     addCrate(3, 14);
     addCrate(-3, 14);
 
-    // Well in town square
+    // Well tucked neatly on the southeast courtyard between Gate and Notice Board
+    const wellX = 4.5;
+    const wellZ = 11.0;
     const wellMat = new THREE.MeshLambertMaterial({ color: 0x5a5565 });
     const well = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 1, 8), wellMat);
-    well.position.set(-3, 0.5, 0);
+    well.position.set(wellX, 0.5, wellZ);
     well.castShadow = true;
     scene.add(well);
-    addCollider(-3.9, -2.1, -0.9, 0.9, "well");
+    addCollider(wellX - 0.75, wellX + 0.75, wellZ - 0.75, wellZ + 0.75, "well");
     const wellRoof = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1, 4), new THREE.MeshLambertMaterial({ color: 0x5c3d2e }));
-    wellRoof.position.set(-3, 2.3, 0);
+    wellRoof.position.set(wellX, 2.3, wellZ);
     wellRoof.rotation.y = Math.PI / 4;
     scene.add(wellRoof);
     // Well supports
     for (let i = 0; i < 2; i++) {
       const sup = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1), new THREE.MeshLambertMaterial({ color: 0x4a3020 }));
-      sup.position.set(-3 + (i === 0 ? -0.6 : 0.6), 1.5, 0);
+      sup.position.set(wellX + (i === 0 ? -0.6 : 0.6), 1.5, wellZ);
       scene.add(sup);
     }
 
-    // Fence posts along edges
-    const fenceBoardMat = new THREE.MeshLambertMaterial({ color: 0x4a3a20 });
+    // Fence posts along edges (skipping open road gates)
     for (let i = -18; i <= 18; i += 3) {
-      // X edges
-      [[-20, i], [20, i]].forEach(([fx, fz]) => {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
-        post.position.set(fx as number, 0.75, fz as number);
-        scene.add(post);
-      });
-      // Z edges
-      [[i, -18], [i, 20]].forEach(([fx, fz]) => {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
-        post.position.set(fx as number, 0.75, fz as number);
-        scene.add(post);
-      });
+      if (Math.abs(i) >= 3) {
+        [[-20, i], [20, i]].forEach(([fx, fz]) => {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
+          post.position.set(fx as number, 0.75, fz as number);
+          scene.add(post);
+        });
+        [[i, -18], [i, 20]].forEach(([fx, fz]) => {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
+          post.position.set(fx as number, 0.75, fz as number);
+          scene.add(post);
+        });
+      }
     }
 
     // ====== LANTERN POSTS along paths ======
@@ -1318,14 +1388,18 @@ const TownWorld = ({
       if (Math.abs(i) < 3) continue; // gate gap
       addWallSegment(i, 18, 4, 0.8);
     }
-    // East wall
-    for (let z = -14; z <= 16; z += 4) {
+    // East wall (open gate gap at z in [-2, 2])
+    for (const z of [-14, -10, -6, 6, 10, 14]) {
       addWallSegment(18, z, 0.8, 4);
     }
-    // West wall
-    for (let z = -14; z <= 16; z += 4) {
+    addWallSegment(18, -2.8, 1.1, 1.4, 2.5);
+    addWallSegment(18, 2.8, 1.1, 1.4, 2.5);
+    // West wall (open gate gap at z in [-2, 2])
+    for (const z of [-14, -10, -6, 6, 10, 14]) {
       addWallSegment(-18, z, 0.8, 4);
     }
+    addWallSegment(-18, -2.8, 1.1, 1.4, 2.5);
+    addWallSegment(-18, 2.8, 1.1, 1.4, 2.5);
     // Wall merlon / battlement details
     for (let i = -16; i <= 16; i += 2) {
       if (Math.abs(i) < 3) continue;
@@ -2177,76 +2251,228 @@ const TownWorld = ({
       scene.add(scrap);
     }
 
-    // ====== VILLAGER NPC (stationary, near well) ======
-    const npcGroup = new THREE.Group();
-    // NPC body
-    const npcBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.7, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0x6a5040 })
+    // ====== OUTSKIRTS ZONES (Forest, Lakeside, Ruined Hilltop) ======
+    // 1. Whispering Forest (West)
+    const forestTrailMat = new THREE.MeshLambertMaterial({ color: 0x5c4a38 });
+    const westTrail1 = new THREE.Mesh(new THREE.BoxGeometry(9, 0.06, 2.8), forestTrailMat);
+    westTrail1.position.set(-22.5, 0.02, 0);
+    westTrail1.receiveShadow = true;
+    scene.add(westTrail1);
+    const westTrail2 = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 9), forestTrailMat);
+    westTrail2.position.set(-26.5, 0.02, 4.5);
+    westTrail2.receiveShadow = true;
+    scene.add(westTrail2);
+    // Hidden clearing meadow ring
+    const clearingPatch = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.6, 4.8, 0.05, 16),
+      new THREE.MeshLambertMaterial({ color: 0x3b6334 })
     );
-    npcBody.position.y = 0.85;
-    npcGroup.add(npcBody);
-    // NPC head
-    const npcHead = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.3, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0xddb88a })
-    );
-    npcHead.position.y = 1.35;
-    npcGroup.add(npcHead);
-    // NPC hat
-    const npcHat = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.22, 0.15, 6),
-      new THREE.MeshLambertMaterial({ color: 0x4a3a2a })
-    );
-    npcHat.position.y = 1.55;
-    npcGroup.add(npcHat);
-    // NPC legs
-    for (let nl = -1; nl <= 1; nl += 2) {
-      const npcLeg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.5, 0.2),
-        new THREE.MeshLambertMaterial({ color: 0x3a2a1a })
-      );
-      npcLeg.position.set(nl * 0.12, 0.25, 0);
-      npcGroup.add(npcLeg);
-    }
-    npcGroup.position.set(-1.5, 0, 0);
-    npcGroup.rotation.y = 0.5;
-    scene.add(npcGroup);
-    addCollider(-1.85, -1.15, -0.35, 0.35, "npc-well");
+    clearingPatch.position.set(-28, 0.02, 9);
+    clearingPatch.receiveShadow = true;
+    scene.add(clearingPatch);
+    // Forest trees framing the trail & clearing (leaving trails walkable)
+    const forestTrees: [number, number, "oak" | "pine", number][] = [
+      [-21, -8, "pine", 4.0], [-26, -11, "oak", 3.4], [-32, -8, "pine", 4.3],
+      [-33, -1, "oak", 3.5], [-34, 6, "pine", 4.4], [-33, 13, "oak", 3.6],
+      [-26, 15, "pine", 4.1], [-21, 13, "oak", 3.2], [-22, 6, "pine", 3.6],
+      [-31, -4, "pine", 3.8],
+    ];
+    forestTrees.forEach(([tx, tz, kind, th]) => {
+      if (kind === "oak") addOak(tx, tz, th);
+      else addPine(tx, tz, th);
+    });
+    // Clearing lantern & mushroom ring
+    addLanternPost(-24.5, 8.2);
+    addMushroom(-29.5, 7.5, 1.1);
+    addMushroom(-30.0, 9.8, 0.9);
+    addMushroom(-27.2, 11.4, 1.0);
 
-    // ====== SECOND NPC (by gallery) ======
-    const npc2Group = new THREE.Group();
-    const npc2Body = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.7, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0x4a5a6a })
+    // 2. Moonlit Lakeside (East)
+    const eastTrail = new THREE.Mesh(new THREE.BoxGeometry(10, 0.06, 2.8), forestTrailMat);
+    eastTrail.position.set(22.5, 0.02, 0);
+    eastTrail.receiveShadow = true;
+    scene.add(eastTrail);
+    // Lake water & dark lakebed
+    const lakeBed = new THREE.Mesh(
+      new THREE.BoxGeometry(12, 0.12, 24),
+      new THREE.MeshLambertMaterial({ color: 0x162436 })
     );
-    npc2Body.position.y = 0.85;
-    npc2Group.add(npc2Body);
-    const npc2Head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.3, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0xccaa88 })
+    lakeBed.position.set(33, -0.02, 0);
+    scene.add(lakeBed);
+    const lakeWater = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.18, 23), waterMat);
+    lakeWater.position.set(33, 0.06, 0);
+    scene.add(lakeWater);
+    // Lake water colliders (leaving wooden pier x in [25.5, 31.5], z in [-1.4, 1.4] walkable)
+    addCollider(27.2, 39, -12.5, -1.5, "lake-north");
+    addCollider(27.2, 39, 1.5, 12.5, "lake-south");
+    addCollider(31.6, 39, -1.5, 1.5, "lake-deep");
+    // Lakeside wooden dock / pier
+    const lakeDockDeck = new THREE.Mesh(
+      new THREE.BoxGeometry(6.2, 0.16, 2.4),
+      new THREE.MeshLambertMaterial({ color: 0x624024 })
     );
-    npc2Head.position.y = 1.35;
-    npc2Group.add(npc2Head);
-    // NPC2 beret (artist)
-    const npc2Beret = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.2, 0.08, 6),
-      new THREE.MeshLambertMaterial({ color: 0xaa3333 })
-    );
-    npc2Beret.position.y = 1.55;
-    npc2Group.add(npc2Beret);
-    for (let nl = -1; nl <= 1; nl += 2) {
-      const leg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.5, 0.2),
-        new THREE.MeshLambertMaterial({ color: 0x3a3a4a })
-      );
-      leg.position.set(nl * 0.12, 0.25, 0);
-      npc2Group.add(leg);
+    lakeDockDeck.position.set(28.5, 0.24, 0);
+    lakeDockDeck.receiveShadow = true;
+    scene.add(lakeDockDeck);
+    for (const px of [26.2, 28.5, 30.8]) {
+      for (const pz of [-1.0, 1.0]) {
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.6, 0.16),
+          new THREE.MeshLambertMaterial({ color: 0x452b16 })
+        );
+        post.position.set(px, 0.18, pz);
+        scene.add(post);
+      }
     }
-    npc2Group.position.set(11.5, 0, 2.5);
-    npc2Group.rotation.y = -1;
-    scene.add(npc2Group);
-    addCollider(11.15, 11.85, 2.15, 2.85, "npc-gallery");
+    addLanternPost(26.0, -1.7);
+    // Moored rowboat on the lakeside
+    const lakeBoatGroup = new THREE.Group();
+    const lBoatHull = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.28, 2.1),
+      new THREE.MeshLambertMaterial({ color: 0x6a4428 })
+    );
+    lakeBoatGroup.add(lBoatHull);
+    const lBoatBench = new THREE.Mesh(
+      new THREE.BoxGeometry(0.95, 0.08, 0.35),
+      new THREE.MeshLambertMaterial({ color: 0x825836 })
+    );
+    lBoatBench.position.y = 0.16;
+    lakeBoatGroup.add(lBoatBench);
+    lakeBoatGroup.position.set(30.6, 0.18, 2.6);
+    lakeBoatGroup.rotation.y = 0.22;
+    scene.add(lakeBoatGroup);
+    // Lakeside trees & reeds
+    addBirch(22, -7, 3.2);
+    addOak(22, 8, 3.4);
+    addPine(24, -11, 3.6);
+    addBirch(24, 11, 2.8);
+
+    // 3. Ruined Hilltop (North)
+    // Trail leading north from (0, -16) onto plateau
+    const northHillTrail = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 6), forestTrailMat);
+    northHillTrail.position.set(0, 0.03, -17);
+    scene.add(northHillTrail);
+    // Crumbled stone pillars & ruin archways on hilltop (y base = 0.6)
+    const ruinStoneMat = new THREE.MeshLambertMaterial({ color: 0x656478 });
+    const ruinMossMat = new THREE.MeshLambertMaterial({ color: 0x3b633c });
+    const addRuinPillar = (rx: number, rz: number, rh: number) => {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, rh, 0.9), ruinStoneMat);
+      pillar.position.set(rx, 0.6 + rh / 2, rz);
+      pillar.castShadow = true;
+      pillar.receiveShadow = true;
+      scene.add(pillar);
+      const mossCap = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.14, 0.95), ruinMossMat);
+      mossCap.position.set(rx, 0.6 + rh + 0.07, rz);
+      scene.add(mossCap);
+      addCollider(rx - 0.5, rx + 0.5, rz - 0.5, rz + 0.5, "ruin-pillar");
+    };
+    addRuinPillar(-4.5, -26.5, 3.2);
+    addRuinPillar(-4.5, -30.5, 2.4);
+    addRuinPillar(4.5, -30.5, 3.5);
+    addRuinPillar(6.5, -25.5, 1.8);
+    // Broken lintel bridging west ruin pillars
+    const ruinLintel = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.6, 4.9), ruinStoneMat);
+    ruinLintel.position.set(-4.5, 0.6 + 2.8, -28.5);
+    ruinLintel.rotation.x = 0.16;
+    scene.add(ruinLintel);
+    // Ancient altar stone
+    const altar = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 1.2), ruinStoneMat);
+    altar.position.set(0, 0.6 + 0.425, -31.0);
+    altar.castShadow = true;
+    scene.add(altar);
+    addCollider(-1.1, 1.1, -31.7, -30.3, "ruin-altar");
+    // Hilltop Campfire (at 3.2, 0.6, -26.8)
+    const hillCampfireGroup = new THREE.Group();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.24), ruinStoneMat);
+      st.position.set(Math.cos(a) * 0.45, 0.09, Math.sin(a) * 0.45);
+      st.rotation.y = a;
+      hillCampfireGroup.add(st);
+    }
+    const hillFireMat = new THREE.MeshBasicMaterial({ color: 0xff7722 });
+    const hillFlame = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.38, 0.26), hillFireMat);
+    hillFlame.position.set(0, 0.26, 0);
+    hillCampfireGroup.add(hillFlame);
+    hillCampfireGroup.position.set(3.2, 0.6, -26.8);
+    scene.add(hillCampfireGroup);
+    addCollider(2.6, 3.8, -27.4, -26.2, "hill-campfire");
+    const hillCampLight = new THREE.PointLight(0xff7733, 2.8, 12, 1.4);
+    hillCampLight.position.set(3.2, 1.6, -26.8);
+    scene.add(hillCampLight);
+    torchLights.push({ light: hillCampLight, baseIntensity: 2.8 });
+    // Hilltop perimeter pines
+    addPine(-9, -25, 3.8);
+    addPine(9, -25, 3.6);
+    addOak(-9, -32, 3.2);
+    addPine(9, -32, 3.8);
+
+    // ====== VILLAGERS (8 idle & patrolling townsfolk) ======
+    interface VillagerRuntime {
+      def: VillagerDef;
+      group: THREE.Group;
+      legL: THREE.Mesh;
+      legR: THREE.Mesh;
+      x: number;
+      z: number;
+      targetIdx: 0 | 1;
+      pauseTimer: number;
+      walkPhase: number;
+    }
+    const villagerRuntimes: VillagerRuntime[] = VILLAGERS.map((v) => {
+      const vGroup = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.72, 0.32),
+        new THREE.MeshLambertMaterial({ color: v.tunicColor })
+      );
+      body.position.y = 0.86;
+      body.castShadow = true;
+      vGroup.add(body);
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.32, 0.32, 0.32),
+        new THREE.MeshLambertMaterial({ color: v.skinColor })
+      );
+      head.position.y = 1.38;
+      vGroup.add(head);
+      const hat = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.23, 0.14, 6),
+        new THREE.MeshLambertMaterial({ color: v.hatColor })
+      );
+      hat.position.y = 1.58;
+      vGroup.add(hat);
+      const vLegMat = new THREE.MeshLambertMaterial({ color: 0x352820 });
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.2), vLegMat);
+      legL.position.set(-0.11, 0.25, 0);
+      vGroup.add(legL);
+      const legR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.2), vLegMat);
+      legR.position.set(0.11, 0.25, 0);
+      vGroup.add(legR);
+
+      if (v.isGreeter) {
+        const badge = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.12, 0),
+          new THREE.MeshBasicMaterial({ color: 0xffdd55 })
+        );
+        badge.position.set(0, 2.05, 0);
+        vGroup.add(badge);
+      }
+
+      const startY = getGroundElevation(v.x, v.z);
+      vGroup.position.set(v.x, startY, v.z);
+      vGroup.rotation.y = v.rotY;
+      scene.add(vGroup);
+      return {
+        def: v,
+        group: vGroup,
+        legL,
+        legR,
+        x: v.x,
+        z: v.z,
+        targetIdx: 1,
+        pauseTimer: 0,
+        walkPhase: Math.random() * Math.PI * 2,
+      };
+    });
 
     // ====== RAIN BARRELS (catchment barrels near buildings) ======
     const rainBarrelMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
@@ -2423,16 +2649,23 @@ const TownWorld = ({
     scene.add(forgeFire);
     torchLights.push({ light: forgeFire, baseIntensity: 4 });
 
-    // ====== PARTICLES (fireflies) ======
-    const particleCount = 60;
+    // ====== PARTICLES (fireflies across town & forest clearing) ======
+    const particleCount = 85;
     const particleGeo = new THREE.BufferGeometry();
     const pPositions = new Float32Array(particleCount * 3);
     const pSpeeds = new Float32Array(particleCount);
 
     for (let i = 0; i < particleCount; i++) {
-      pPositions[i * 3] = (Math.random() - 0.5) * 40;
-      pPositions[i * 3 + 1] = Math.random() * 4 + 0.5;
-      pPositions[i * 3 + 2] = (Math.random() - 0.5) * 40;
+      if (i >= 60) {
+        // Extra golden fireflies clustering in the Whispering Forest clearing
+        pPositions[i * 3] = -28 + (Math.random() - 0.5) * 12;
+        pPositions[i * 3 + 1] = Math.random() * 3.2 + 0.5;
+        pPositions[i * 3 + 2] = 7 + (Math.random() - 0.5) * 14;
+      } else {
+        pPositions[i * 3] = (Math.random() - 0.5) * 44;
+        pPositions[i * 3 + 1] = Math.random() * 4 + 0.5;
+        pPositions[i * 3 + 2] = (Math.random() - 0.5) * 44;
+      }
       pSpeeds[i] = Math.random() * 0.5 + 0.2;
     }
     particleGeo.setAttribute("position", new THREE.BufferAttribute(pPositions, 3));
@@ -2525,6 +2758,9 @@ const TownWorld = ({
     let lastEmittedZ = playerPosRef.current.z;
     onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
 
+    const targetFogColor = new THREE.Color(ZONE_METADATA.town.fogColorHex);
+    let lastCloakState = cloakEquippedRef.current;
+
     const animate = (now: number) => {
       animFrameRef.current = requestAnimationFrame(animate);
       if (pausedRef.current) {
@@ -2535,6 +2771,74 @@ const TownWorld = ({
       lastTime = now;
       elapsed += dt;
       const keys = keysRef.current;
+
+      // ---- Sync Royal Cloak appearance if toggled ----
+      if (cloakEquippedRef.current !== lastCloakState) {
+        lastCloakState = cloakEquippedRef.current;
+        if (lastCloakState) {
+          cloakHoodMat.color.setHex(0x1e6b52);
+          capeMat.color.setHex(0x1a5e48);
+          scarfMat.color.setHex(0xf5c842);
+          playerAuraMat.color.setHex(0x55ee99);
+          playerAuraMat.opacity = 0.55;
+        } else {
+          cloakHoodMat.color.setHex(0x283044);
+          capeMat.color.setHex(0x2b354d);
+          scarfMat.color.setHex(0xd9483b);
+          playerAuraMat.color.setHex(0xf0c248);
+          playerAuraMat.opacity = 0.42;
+        }
+      }
+
+      // ---- Update patrolling villagers ----
+      const dynamicNpcColliders: ColliderBox[] = [];
+      for (const vr of villagerRuntimes) {
+        if (vr.def.patrolTo) {
+          const dest = vr.targetIdx === 1 ? vr.def.patrolTo : { x: vr.def.x, z: vr.def.z };
+          const toX = dest.x - vr.x;
+          const toZ = dest.z - vr.z;
+          const distToDest = Math.hypot(toX, toZ);
+          const distToPlayer = Math.hypot(
+            playerPosRef.current.x - vr.x,
+            playerPosRef.current.z - vr.z
+          );
+          if (vr.pauseTimer > 0) {
+            vr.pauseTimer -= dt;
+            vr.legL.rotation.x *= Math.exp(-10 * dt);
+            vr.legR.rotation.x *= Math.exp(-10 * dt);
+          } else if (distToPlayer < 1.35) {
+            // Pause and face player politely when nearby
+            vr.group.rotation.y = Math.atan2(
+              playerPosRef.current.x - vr.x,
+              playerPosRef.current.z - vr.z
+            );
+            vr.legL.rotation.x *= Math.exp(-10 * dt);
+            vr.legR.rotation.x *= Math.exp(-10 * dt);
+          } else if (distToDest < 0.12) {
+            vr.targetIdx = vr.targetIdx === 1 ? 0 : 1;
+            vr.pauseTimer = 1.4;
+          } else {
+            const spd = (vr.def.speed || 1.2) * dt;
+            const nx = (toX / distToDest) * spd;
+            const nz = (toZ / distToDest) * spd;
+            vr.x += nx;
+            vr.z += nz;
+            vr.group.rotation.y = Math.atan2(nx, nz);
+            vr.walkPhase += dt * 7.5;
+            vr.legL.rotation.x = Math.sin(vr.walkPhase) * 0.4;
+            vr.legR.rotation.x = -Math.sin(vr.walkPhase) * 0.4;
+          }
+        }
+        const vy = getGroundElevation(vr.x, vr.z);
+        vr.group.position.set(vr.x, vy, vr.z);
+        dynamicNpcColliders.push({
+          minX: vr.x - 0.35,
+          maxX: vr.x + 0.35,
+          minZ: vr.z - 0.35,
+          maxZ: vr.z + 0.35,
+          label: vr.def.id,
+        });
+      }
 
       // ---- Player movement ----
       if (!modalOpenRef.current) {
@@ -2557,12 +2861,16 @@ const TownWorld = ({
           handleInteract();
         }
 
+        const allColliders = colliders.concat(dynamicNpcColliders);
         const step = resolvePlayerStep(
           { x: playerPosRef.current.x, z: playerPosRef.current.z },
           dx,
           dz,
           dt,
-          colliders
+          allColliders,
+          undefined,
+          undefined,
+          EXPANDED_WORLD_BOUNDS
         );
 
         if (step.moved) {
@@ -2628,11 +2936,20 @@ const TownWorld = ({
           cape.position.z = -0.26;
         }
 
+        const playerElev = getGroundElevation(playerPosRef.current.x, playerPosRef.current.z);
         playerGroup.position.set(
           playerPosRef.current.x,
-          0,
+          playerElev,
           playerPosRef.current.z
         );
+
+        // Zone check & smooth fog/sky biome transition
+        const detectedZone = detectPlayerZone(playerPosRef.current.x, playerPosRef.current.z);
+        if (detectedZone !== currentZoneRef.current) {
+          currentZoneRef.current = detectedZone;
+          targetFogColor.setHex(ZONE_METADATA[detectedZone].fogColorHex);
+          onZoneChangeRef.current?.(detectedZone);
+        }
 
         if (
           now - lastPosEmitTime > 110 &&
@@ -2647,6 +2964,20 @@ const TownWorld = ({
       } else {
         sweepDone = true;
       }
+
+      // Smoothly transition fog & background on zone transitions
+      if (scene.fog instanceof THREE.Fog) {
+        scene.fog.color.lerp(targetFogColor, expDampingAlpha(3.2, dt));
+      }
+      if (scene.background instanceof THREE.Color) {
+        scene.background.lerp(targetFogColor, expDampingAlpha(3.2, dt));
+      }
+
+      // Gently bob lakeside rowboat & hilltop campfire flame
+      lakeBoatGroup.position.y = 0.18 + Math.sin(elapsed * 1.8) * 0.04;
+      lakeBoatGroup.rotation.z = Math.sin(elapsed * 1.4) * 0.04;
+      hillFlame.scale.setScalar(0.85 + Math.sin(elapsed * 7) * 0.2);
+      hillFlame.rotation.y = elapsed * 2.5;
 
       // ---- Opening camera sweep or smooth player follow ----
       if (!sweepDone) {
@@ -2672,7 +3003,22 @@ const TownWorld = ({
         camera.lookAt(camLookTarget);
       }
 
-      // ---- Proximity check ----
+      // ---- Proximity check (villagers + buildings) ----
+      let closestVillager: VillagerDef | null = null;
+      let closestNpcDist = VILLAGER_INTERACT_DISTANCE;
+      for (const vr of villagerRuntimes) {
+        const d = Math.hypot(playerPosRef.current.x - vr.x, playerPosRef.current.z - vr.z);
+        if (d < closestNpcDist) {
+          closestNpcDist = d;
+          closestVillager = vr.def;
+        }
+      }
+
+      if (closestVillager?.id !== nearVillagerRef.current?.id) {
+        nearVillagerRef.current = closestVillager;
+        onNearVillagerRef.current?.(closestVillager);
+      }
+
       let closestBuilding: BuildingDef | null = null;
       let closestDist = INTERACT_DISTANCE;
 

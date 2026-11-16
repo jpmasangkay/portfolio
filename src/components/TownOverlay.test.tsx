@@ -2,32 +2,97 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import TownOverlay from "./TownOverlay";
 import QuickViewPortfolio from "./QuickViewPortfolio";
+import VillagerDialogueBox from "./VillagerDialogueBox";
+import QuestLogModal from "./modals/QuestLogModal";
+import { VILLAGERS } from "@/data/villagers";
+import { TOWN_BUILDINGS_LAYOUT } from "@/lib/town-buildings";
 
 describe("TownOverlay and QuickViewPortfolio", () => {
-  it("renders subtitle, visited ticks, clickable building guide, and unvisited compass", () => {
+  it("renders subtitle, visited ticks, clickable building guide, quests button, and unvisited compass", () => {
     const onSelectBuilding = vi.fn();
     const onToggleQuickView = vi.fn();
+    const onOpenQuestLog = vi.fn();
 
     render(
       <TownOverlay
         nearBuilding={null}
+        nearVillager={VILLAGERS[0]}
+        greetedByRowan={false}
+        currentZone="town"
         modalOpen={false}
         visitedBuildings={new Set(["tavern"])}
         playerPos={{ x: 0, z: 7 }}
         onSelectBuilding={onSelectBuilding}
         onToggleQuickView={onToggleQuickView}
+        onOpenQuestLog={onOpenQuestLog}
       />
     );
 
     expect(screen.getByText(/Shealtiel Masangkay/i)).toBeInTheDocument();
     expect(screen.getByText(/1\/8 visited/)).toBeInTheDocument();
+    expect(screen.getByText(/Town Square/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rowan — Town Greeter/i)).toBeInTheDocument();
 
     const towerBtns = screen.getAllByRole("button", { name: /Tower/i });
     fireEvent.click(towerBtns[0]);
     expect(onSelectBuilding).toHaveBeenCalledWith("wizard");
 
+    fireEvent.click(screen.getByRole("button", { name: /Open Quest Log/i }));
+    expect(onOpenQuestLog).toHaveBeenCalledTimes(1);
+
     fireEvent.click(screen.getByRole("button", { name: /Quick View/i }));
     expect(onToggleQuickView).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders VillagerDialogueBox and cycles lines", () => {
+    const onNext = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <VillagerDialogueBox
+        villager={VILLAGERS[0]}
+        lineIndex={0}
+        onNext={onNext}
+        onClose={onClose}
+      />
+    );
+
+    expect(screen.getByText(new RegExp(VILLAGERS[0].lines[0].slice(0, 24)))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    expect(onNext).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Close/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders QuestLogModal locked and unlocked reward states", () => {
+    const onToggleCloak = vi.fn();
+    const { rerender } = render(
+      <QuestLogModal
+        visitedBuildings={new Set(["tavern"])}
+        visitedZones={new Set(["town"])}
+        greetedByRowan={false}
+        cloakEquipped={false}
+        onToggleCloak={onToggleCloak}
+        onJumpToBuilding={vi.fn()}
+        onOpenQuickView={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Completion Reward \(7 left\)/i)).toBeInTheDocument();
+
+    rerender(
+      <QuestLogModal
+        visitedBuildings={new Set(TOWN_BUILDINGS_LAYOUT.map((b) => b.id))}
+        visitedZones={new Set(["town", "forest", "lakeside", "ruins"])}
+        greetedByRowan={true}
+        cloakEquipped={false}
+        onToggleCloak={onToggleCloak}
+        onJumpToBuilding={vi.fn()}
+        onOpenQuickView={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Reward Unlocked: Royal Cloak & Hire Me Scroll/i)).toBeInTheDocument();
+    expect(screen.getByText(/Archmage-Rogue Royal Cloak/i)).toBeInTheDocument();
   });
 
   it("renders all portfolio sections in QuickViewPortfolio and allows returning", () => {
