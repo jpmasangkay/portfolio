@@ -63,6 +63,7 @@ interface TownWorldProps {
   onInteriorChange?: (interior: InteriorId | null) => void;
   onNearInteriorAction?: (action: InteriorActionPrompt | null) => void;
   onTimeInfoChange?: (info: { label: DayNightState["label"]; emoji: string; raining: boolean }) => void;
+  onFirstFrame?: () => void;
   foundSecrets?: ReadonlySet<string>;
   cloakEquipped?: boolean;
   nightPinned?: boolean;
@@ -106,6 +107,7 @@ const TownWorld = ({
   onInteriorChange,
   onNearInteriorAction,
   onTimeInfoChange,
+  onFirstFrame,
   foundSecrets,
   cloakEquipped = false,
   nightPinned = true,
@@ -144,6 +146,7 @@ const TownWorld = ({
   const onInteriorChangeRef = useRef(onInteriorChange);
   const onNearInteriorActionRef = useRef(onNearInteriorAction);
   const onTimeInfoChangeRef = useRef(onTimeInfoChange);
+  const onFirstFrameRef = useRef(onFirstFrame);
 
   useEffect(() => {
     onPlayerPosChangeRef.current = onPlayerPosChange;
@@ -155,6 +158,7 @@ const TownWorld = ({
     onInteriorChangeRef.current = onInteriorChange;
     onNearInteriorActionRef.current = onNearInteriorAction;
     onTimeInfoChangeRef.current = onTimeInfoChange;
+    onFirstFrameRef.current = onFirstFrame;
   }, [
     onPlayerPosChange,
     onTalkVillager,
@@ -165,6 +169,7 @@ const TownWorld = ({
     onInteriorChange,
     onNearInteriorAction,
     onTimeInfoChange,
+    onFirstFrame,
   ]);
 
   useEffect(() => {
@@ -248,34 +253,99 @@ const TownWorld = ({
     if (!mountRef.current) return;
     const container = mountRef.current;
 
-    // ====== RENDERER (low res for pixel art) ======
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
-    const pixelW = Math.floor(window.innerWidth / PIXEL_SCALE);
-    const pixelH = Math.floor(window.innerHeight / PIXEL_SCALE);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(1);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.BasicShadowMap; // hard pixel shadows
-    renderer.toneMapping = THREE.NoToneMapping;
-    renderer.domElement.style.imageRendering = "pixelated";
-    container.appendChild(renderer.domElement);
+    let disposed = false;
+    const cleanups: Array<() => void> = [];
+    const yieldFrame = () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    const yieldTask = () =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    const setSplashProgress = (fraction: number) => {
+      const fill = document.getElementById("boot-splash-fill");
+      if (fill) {
+        fill.style.transform = `scaleX(${fraction})`;
+      }
+    };
 
-    // Render target for pixel art look
-    const renderTarget = new THREE.WebGLRenderTarget(pixelW, pixelH, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-    });
+    const initRealm = async () => {
+      // Wait for two animation frames so the lightweight HTML/CSS title card
+      // completes first paint before Three.js allocates or compiles shaders.
+      await yieldFrame();
+      if (disposed) return;
+      await yieldFrame();
+      if (disposed) return;
+      setSplashProgress(0.24);
 
-    // Screen quad to display pixelated render
-    const screenScene = new THREE.Scene();
-    const screenCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const screenMat = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
-    const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
-    screenScene.add(screenQuad);
+      // ====== RENDERER (low res for pixel art) ======
+      const renderer = new THREE.WebGLRenderer({ antialias: false });
+      // Skip synchronous shader infoLog queries in production builds to avoid main-thread stalls.
+      renderer.debug.checkShaderErrors = !import.meta.env.PROD;
+      const pixelW = Math.floor(window.innerWidth / PIXEL_SCALE);
+      const pixelH = Math.floor(window.innerHeight / PIXEL_SCALE);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(1);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.BasicShadowMap; // hard pixel shadows
+      renderer.toneMapping = THREE.NoToneMapping;
+      renderer.domElement.style.imageRendering = "pixelated";
+      container.appendChild(renderer.domElement);
 
-    // ====== SCENE ======
-    const scene = new THREE.Scene();
+      // Render target for pixel art look
+      const renderTarget = new THREE.WebGLRenderTarget(pixelW, pixelH, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+      });
+
+      // Screen quad to display pixelated render
+      const screenScene = new THREE.Scene();
+      const screenCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const screenMat = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
+      const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
+      screenScene.add(screenQuad);
+
+      // ====== SCENE ======
+      const scene = new THREE.Scene();
+
+      // Register baseline GPU disposal immediately so aborting mid-build never leaks
+      cleanups.push(() => {
+        const disposedGeos = new Set<THREE.BufferGeometry>();
+        const disposedMats = new Set<THREE.Material>();
+        const disposeMat = (m: THREE.Material) => {
+          if (disposedMats.has(m)) return;
+          disposedMats.add(m);
+          for (const val of Object.values(m)) {
+            if (val && typeof val === "object" && "isTexture" in val && val.isTexture) {
+              (val as THREE.Texture).dispose();
+            }
+          }
+          m.dispose();
+        };
+        scene.traverse((obj) => {
+          if ("geometry" in obj && obj.geometry && typeof (obj.geometry as THREE.BufferGeometry).dispose === "function") {
+            const geo = obj.geometry as THREE.BufferGeometry;
+            if (!disposedGeos.has(geo)) {
+              disposedGeos.add(geo);
+              geo.dispose();
+            }
+          }
+          if ("material" in obj && obj.material) {
+            const mat = obj.material;
+            if (Array.isArray(mat)) mat.forEach(disposeMat);
+            else disposeMat(mat as THREE.Material);
+          }
+        });
+        screenQuad.geometry.dispose();
+        screenMat.dispose();
+        renderTarget.dispose();
+        if (container.contains(renderer.domElement)) {
+          container.removeChild(renderer.domElement);
+        }
+        renderer.dispose();
+      });
     scene.background = new THREE.Color(0x161932);
     scene.fog = new THREE.Fog(0x161932, 34, 68);
 
@@ -402,6 +472,10 @@ const TownWorld = ({
     addDirtPatch(3, -10, 1);   // wizard area
     addDirtPatch(9, 9, 0.8);   // notice board
 
+    setSplashProgress(0.3);
+    await yieldTask();
+    if (disposed) return;
+
     // ====== PATHS (instanced cobblestones & border stones for fast draw calls) ======
     const cobblePalette = [
       new THREE.Color(0x8a7a68),
@@ -519,6 +593,9 @@ const TownWorld = ({
     borderPlacements.forEach((m, idx) => borderInstMesh.setMatrixAt(idx, m));
     borderInstMesh.instanceMatrix.needsUpdate = true;
     scene.add(borderInstMesh);
+
+    await yieldTask();
+    if (disposed) return;
 
     // ====== POND (detailed) ======
     // Pond bed (darker earth)
@@ -704,6 +781,10 @@ const TownWorld = ({
     // Fence near pond
     addFence(7.5, -3, 7.5, -7, 5);
 
+    setSplashProgress(0.36);
+    await yieldTask();
+    if (disposed) return;
+
     // ====== BUILD BUILDINGS ======
     const colliders: ColliderBox[] = [];
     const addCollider = (minX: number, maxX: number, minZ: number, maxZ: number, label?: string) => {
@@ -711,7 +792,8 @@ const TownWorld = ({
     };
     const beacons: { mesh: THREE.Mesh; glow: THREE.Mesh; baseY: number }[] = [];
 
-    BUILDINGS.forEach((b) => {
+    for (let bIdx = 0; bIdx < BUILDINGS.length; bIdx++) {
+      const b = BUILDINGS[bIdx];
       const group = new THREE.Group();
       const wallMat = new THREE.MeshLambertMaterial({ color: b.wallColor });
       const roofMaterial = new THREE.MeshLambertMaterial({ color: b.roofColor });
@@ -1257,7 +1339,17 @@ const TownWorld = ({
       entranceSign.add(stripe);
       entranceSign.position.set(b.x + b.w / 2 + 0.8, 0, b.z + b.d / 2);
       scene.add(entranceSign);
-    });
+
+      if (bIdx === 3) {
+        setSplashProgress(0.45);
+        await yieldTask();
+        if (disposed) return;
+      }
+    }
+
+    setSplashProgress(0.5);
+    await yieldTask();
+    if (disposed) return;
 
     // ====== DECORATIONS ======
     // Trees
@@ -1576,6 +1668,10 @@ const TownWorld = ({
     addLanternPost(-6, -2);
     addLanternPost(6, 2);
     addLanternPost(-6, 2);
+
+    setSplashProgress(0.58);
+    await yieldTask();
+    if (disposed) return;
 
     // ====== STONE WALLS around town perimeter ======
     const wallMat2 = new THREE.MeshLambertMaterial({ color: 0x5a5565 });
@@ -2441,6 +2537,10 @@ const TownWorld = ({
       scene.add(scrap);
     }
 
+    setSplashProgress(0.64);
+    await yieldTask();
+    if (disposed) return;
+
     // ====== OUTSKIRTS ZONES (Forest, Lakeside, Ruined Hilltop) ======
     // 1. Whispering Forest (West)
     const forestTrailMat = new THREE.MeshLambertMaterial({ color: 0x5c4a38 });
@@ -2476,6 +2576,10 @@ const TownWorld = ({
     addMushroom(-29.5, 7.5, 1.1);
     addMushroom(-30.0, 9.8, 0.9);
     addMushroom(-27.2, 11.4, 1.0);
+
+    setSplashProgress(0.69);
+    await yieldTask();
+    if (disposed) return;
 
     // 2. Moonlit Lakeside (East)
     const eastTrail = new THREE.Mesh(new THREE.BoxGeometry(10, 0.06, 2.8), forestTrailMat);
@@ -2536,6 +2640,9 @@ const TownWorld = ({
     addOak(22, 8, 3.4);
     addPine(24, -11, 3.6);
     addBirch(24, 11, 2.8);
+
+    await yieldTask();
+    if (disposed) return;
 
     // 3. Ruined Hilltop (North)
     // Trail leading north from (0, -16) onto plateau
@@ -2612,6 +2719,10 @@ const TownWorld = ({
     addCollider(2.2, 13.5, -23.0, -22.2, "hill-cliff-se");
     addCollider(-13.5, -12.7, -36.5, -22.2, "hill-cliff-w");
     addCollider(12.7, 13.5, -36.5, -22.2, "hill-cliff-e");
+
+    setSplashProgress(0.75);
+    await yieldTask();
+    if (disposed) return;
 
     // ====== VILLAGERS (8 idle & patrolling townsfolk) ======
     interface VillagerRuntime {
@@ -2936,6 +3047,10 @@ const TownWorld = ({
       secretItems.push({ def, group: sGroup, accent, ring, ringMat });
     }
 
+    setSplashProgress(0.82);
+    await yieldTask();
+    if (disposed) return;
+
     // ====== WALK-IN INTERIORS (Tavern & Wizard's Tower Cutaway Rooms) ======
     const tavernInteriorColliders: ColliderBox[] = [];
     const wizardInteriorColliders: ColliderBox[] = [];
@@ -3172,6 +3287,10 @@ const TownWorld = ({
     });
     scene.add(new THREE.Points(starGeo, starMat));
 
+    setSplashProgress(0.88);
+    await yieldTask();
+    if (disposed) return;
+
     // ====== STATIC GEOMETRY BATCHING & ZONE VISIBILITY GROUPS ======
     markDynamicSubtree(playerGroup);
     markDynamicSubtree(familiarGroup);
@@ -3206,8 +3325,15 @@ const TownWorld = ({
     scene.add(outdoorWorldGroup);
 
     batchStaticMeshes(outdoorWorldGroup, outdoorWorldGroup, 18);
+    await yieldTask();
+    if (disposed) return;
+
     batchStaticMeshes(tavernRoomGroup, tavernRoomGroup, 18);
     batchStaticMeshes(wizardRoomGroup, wizardRoomGroup, 18);
+
+    setSplashProgress(0.94);
+    await yieldTask();
+    if (disposed) return;
 
     // ====== INPUT ======
     const GAME_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "e"]);
@@ -3246,6 +3372,12 @@ const TownWorld = ({
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", clearHeldInputs);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    cleanups.push(() => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearHeldInputs);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    });
 
     // ====== QUALITY TIER & RESIZE ======
     const qualityMonitor = new QualityMonitor();
@@ -3304,6 +3436,9 @@ const TownWorld = ({
       );
     };
     window.addEventListener("resize", onResize);
+    cleanups.push(() => {
+      window.removeEventListener("resize", onResize);
+    });
 
     // ====== ANIMATION (frame-rate independent with clamped delta) ======
     let lastTime = performance.now();
@@ -3948,51 +4083,41 @@ const TownWorld = ({
       renderer.render(screenScene, screenCam);
     };
 
-    animFrameRef.current = requestAnimationFrame(animate);
+      // Asynchronous shader pre-compilation before first frame & splash fade
+      if (typeof renderer.compileAsync === "function") {
+        try {
+          await renderer.compileAsync(scene, camera);
+        } catch {
+          renderer.compile(scene, camera);
+        }
+      }
+      if (disposed) return;
+      setSplashProgress(0.98);
+      await yieldTask();
+      if (disposed) return;
+
+      renderer.setRenderTarget(renderTarget);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      renderer.render(screenScene, screenCam);
+      setSplashProgress(1);
+      onFirstFrameRef.current?.();
+
+      lastTime = performance.now();
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    void initRealm().catch(() => {
+      onFirstFrameRef.current?.();
+    });
 
     // ====== CLEANUP (dispose geometries, materials, render target & listeners) ======
     return () => {
+      disposed = true;
       cancelAnimationFrame(animFrameRef.current);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", clearHeldInputs);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("resize", onResize);
-
-      const disposedGeos = new Set<THREE.BufferGeometry>();
-      const disposedMats = new Set<THREE.Material>();
-      const disposeMat = (m: THREE.Material) => {
-        if (disposedMats.has(m)) return;
-        disposedMats.add(m);
-        for (const val of Object.values(m)) {
-          if (val && typeof val === "object" && "isTexture" in val && val.isTexture) {
-            (val as THREE.Texture).dispose();
-          }
-        }
-        m.dispose();
-      };
-
-      scene.traverse((obj) => {
-        if ("geometry" in obj && obj.geometry && typeof (obj.geometry as THREE.BufferGeometry).dispose === "function") {
-          const geo = obj.geometry as THREE.BufferGeometry;
-          if (!disposedGeos.has(geo)) {
-            disposedGeos.add(geo);
-            geo.dispose();
-          }
-        }
-        if ("material" in obj && obj.material) {
-          const mat = obj.material;
-          if (Array.isArray(mat)) mat.forEach(disposeMat);
-          else disposeMat(mat as THREE.Material);
-        }
-      });
-      screenQuad.geometry.dispose();
-      screenMat.dispose();
-      renderTarget.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      for (let i = cleanups.length - 1; i >= 0; i--) {
+        cleanups[i]();
       }
-      renderer.dispose();
     };
   }, [handleInteract, onNearBuilding]);
 

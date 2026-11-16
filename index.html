@@ -10,26 +10,100 @@
     <title>Shealtiel Masangkay — Adventurer's Portfolio</title>
     <meta name="description" content="Interactive 3D voxel portfolio for Shealtiel John Paul A. Masangkay — CS student, Full-Stack Web Developer, and Game Creator based in Atimonan, Quezon." />
     <meta name="author" content="Shealtiel John Paul A. Masangkay" />
+    <link rel="canonical" href="__SITE_URL__/" />
 
     <!-- Open Graph -->
     <meta property="og:site_name" content="Shealtiel's Realm" />
     <meta property="og:title" content="Shealtiel Masangkay — Adventurer's Portfolio" />
     <meta property="og:description" content="Explore a playable isometric voxel town showcasing TypeScript, React, PHP/Laravel, Unity, and Blender projects, credentials, and a plain recruiter view." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://jpmasangkay.github.io/portfolio/" />
-    <meta property="og:image" content="/og-preview.png" />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:image" content="__SITE_URL__/og-preview.png" />
     <meta property="og:image:alt" content="Isometric night view of Shealtiel's Realm 3D voxel portfolio town" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Shealtiel Masangkay — Adventurer's Portfolio" />
     <meta name="twitter:description" content="Explore a playable isometric voxel realm showcasing projects, skills, credentials, and instant Quick View resume mode." />
-    <meta name="twitter:image" content="/og-preview.png" />
+    <meta name="twitter:image" content="__SITE_URL__/og-preview.png" />
     <meta name="twitter:image:alt" content="Isometric night view of Shealtiel's Realm 3D voxel portfolio town" />
+
+    <!-- Critical First-Paint Title Card Styles -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #0a0812;
+        color: #ebe4d6;
+      }
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: #0a0812;
+        transition: opacity 0.28s ease;
+        pointer-events: none;
+      }
+      #boot-splash.is-ready {
+        opacity: 0;
+      }
+      .boot-card {
+        width: min(360px, 100%);
+        padding: 22px 24px;
+        background: #121020;
+        border: 1px solid #35304d;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+        text-align: center;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      .boot-title {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #ebb03d;
+      }
+      .boot-subtitle {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: #cbc4da;
+      }
+      .boot-bar-track {
+        width: 100%;
+        height: 4px;
+        background: #232036;
+        overflow: hidden;
+      }
+      .boot-bar-fill {
+        width: 100%;
+        height: 100%;
+        background: #ebb03d;
+        transform-origin: left center;
+        transform: scaleX(0.18);
+        transition: transform 0.2s ease;
+        animation: bootPulse 1.4s ease-in-out infinite alternate;
+      }
+      @keyframes bootPulse {
+        from { opacity: 0.65; }
+        to { opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash, .boot-bar-fill {
+          transition: none;
+          animation: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
     <noscript>
+      <style>#boot-splash { display: none !important; }</style>
       <main style="max-width:780px;margin:0 auto;padding:32px 20px;font-family:system-ui,-apple-system,sans-serif;line-height:1.65;color:#ebe4d6;background:#0e0c18;">
         <h1 style="color:#ebb03d;margin-bottom:8px;">Shealtiel John Paul A. Masangkay — Portfolio</h1>
         <p style="margin-bottom:18px;color:#b8b2c8;">
@@ -72,6 +146,15 @@
         </section>
       </main>
     </noscript>
+    <div id="boot-splash" role="status" aria-live="polite" aria-label="Loading 3D portfolio scene">
+      <div class="boot-card">
+        <p class="boot-title">Shealtiel&apos;s Realm</p>
+        <p class="boot-subtitle">Adventurer&apos;s Portfolio · CS &amp; Full-Stack Web Developer</p>
+        <div class="boot-bar-track" aria-hidden="true">
+          <div id="boot-splash-fill" class="boot-bar-fill"></div>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

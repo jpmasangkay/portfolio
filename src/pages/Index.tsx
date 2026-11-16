@@ -1,11 +1,12 @@
 import { Suspense, lazy, useState, useCallback, useEffect, useRef, useMemo } from "react";
 import BgMusic from "@/components/BgMusic";
-import TownWorld, { type InteriorActionPrompt } from "@/components/TownWorld";
+import type { InteriorActionPrompt } from "@/components/TownWorld";
 import TownOverlay from "@/components/TownOverlay";
 import ScrollModal from "@/components/ScrollModal";
 import VillagerDialogueBox from "@/components/VillagerDialogueBox";
 import type { BuildingId } from "@/data/portfolio-data";
 
+const TownWorld = lazy(() => import("@/components/TownWorld"));
 const QuickViewPortfolio = lazy(() => import("@/components/QuickViewPortfolio"));
 const TavernModal = lazy(() => import("@/components/modals/TavernModal"));
 const QuestBoardModal = lazy(() => import("@/components/modals/QuestBoardModal"));
@@ -307,6 +308,18 @@ const Index = () => {
     [visitedBuildings.size, talkedVillagers.size, visitedZones, foundSecrets.size]
   );
 
+  const dismissBootSplash = useCallback(() => {
+    const splash = document.getElementById("boot-splash");
+    if (!splash) return;
+    const fill = document.getElementById("boot-splash-fill");
+    if (fill) fill.style.transform = "scaleX(1)";
+    splash.classList.add("is-ready");
+    splash.setAttribute("aria-hidden", "true");
+    window.setTimeout(() => {
+      splash.remove();
+    }, 320);
+  }, []);
+
   const anyModalOpen = activeModal !== null || activeVillager !== null || questLogOpen;
   const currentStdModal =
     activeModal && activeModal !== "wizard" ? modalConfig[activeModal] : null;
@@ -316,27 +329,30 @@ const Index = () => {
       {/* Background Music */}
       <BgMusic />
 
-      {/* 3D World */}
-      <TownWorld
-        onInteract={handleInteract}
-        onNearBuilding={handleNearBuilding}
-        onTalkVillager={handleTalkVillager}
-        onNearVillager={handleNearVillager}
-        onNearSecret={setNearSecret}
-        onCollectSecret={handleCollectSecret}
-        onZoneChange={handleZoneChange}
-        onPlayerPosChange={setPlayerPos}
-        onInteriorChange={handleInteriorChange}
-        onNearInteriorAction={setNearInteriorAction}
-        onTimeInfoChange={setTimeInfo}
-        foundSecrets={foundSecrets}
-        cloakEquipped={cloakEquipped}
-        nightPinned={nightPinned}
-        lowGraphics={lowGraphics}
-        exitInteriorSignal={exitInteriorSignal}
-        modalOpen={anyModalOpen}
-        paused={quickView}
-      />
+      {/* 3D World (deferred lazy chunk; title card stays visible until first frame renders) */}
+      <Suspense fallback={null}>
+        <TownWorld
+          onInteract={handleInteract}
+          onNearBuilding={handleNearBuilding}
+          onTalkVillager={handleTalkVillager}
+          onNearVillager={handleNearVillager}
+          onNearSecret={setNearSecret}
+          onCollectSecret={handleCollectSecret}
+          onZoneChange={handleZoneChange}
+          onPlayerPosChange={setPlayerPos}
+          onInteriorChange={handleInteriorChange}
+          onNearInteriorAction={setNearInteriorAction}
+          onTimeInfoChange={setTimeInfo}
+          onFirstFrame={dismissBootSplash}
+          foundSecrets={foundSecrets}
+          cloakEquipped={cloakEquipped}
+          nightPinned={nightPinned}
+          lowGraphics={lowGraphics}
+          exitInteriorSignal={exitInteriorSignal}
+          modalOpen={anyModalOpen}
+          paused={quickView}
+        />
+      </Suspense>
 
       {/* HUD Overlay */}
       {!quickView && (
@@ -363,6 +379,7 @@ const Index = () => {
           playerPos={playerPos}
           onSelectBuilding={handleInteract}
           onToggleQuickView={() => {
+            dismissBootSplash();
             setActiveModal(null);
             setActiveVillager(null);
             setQuestLogOpen(false);
