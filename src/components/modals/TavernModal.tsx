@@ -31,7 +31,14 @@ const TavernModal = () => {
       </p>
 
       {/* Stats grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
         <div>
           <p style={labelStyle}>🗡️ Name</p>
           <p style={valueStyle}>{personalInfo.name}</p>
@@ -44,9 +51,16 @@ const TavernModal = () => {
           <p style={labelStyle}>⚔️ Current Quest</p>
           <p style={valueStyle}>{personalInfo.objective}</p>
         </div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <p style={labelStyle}>📧 Raven Address</p>
-          <p style={valueStyle}>{personalInfo.email}</p>
+          <p style={{ ...valueStyle, overflowWrap: "anywhere", wordBreak: "break-word" }}>
+            <a
+              href={`mailto:${personalInfo.email}`}
+              style={{ color: "hsl(38, 85%, 62%)", textDecoration: "none" }}
+            >
+              {personalInfo.email}
+            </a>
+          </p>
         </div>
       </div>
 
@@ -78,12 +92,22 @@ const TavernModal = () => {
       {/* Education */}
       <p style={{ ...labelStyle, marginBottom: 12 }}>📚 Training History</p>
       {education.map((edu, i) => (
-        <div key={i} style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div
+          key={i}
+          style={{
+            marginBottom: 12,
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 6,
+          }}
+        >
           <div>
             <p style={{ ...modalText, color: "hsl(40, 25%, 85%)" }}>{edu.degree}</p>
             <p style={{ ...modalText, fontSize: 12, opacity: 0.6 }}>{edu.school}</p>
           </div>
-          <p style={{ ...modalText, fontSize: 11, color: "hsl(150, 40%, 45%)", whiteSpace: "nowrap", marginLeft: 12 }}>
+          <p style={{ ...modalText, fontSize: 11, color: "hsl(150, 40%, 45%)", whiteSpace: "nowrap" }}>
             {edu.years}
           </p>
         </div>

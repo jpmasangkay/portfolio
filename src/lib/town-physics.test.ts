@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampDeltaSec,
+  computeOrthoFrustum,
   expDampingAlpha,
   isPositionBlocked,
   MAX_FRAME_DELTA_SEC,
@@ -70,5 +71,15 @@ describe("town-physics", () => {
     expect(isPositionBlocked(6.8, -5, colliders)).toBe(true);
     // Fountain center is blocked
     expect(isPositionBlocked(-3.5, -3.5, colliders)).toBe(true);
+  });
+
+  it("widens portrait orthographic frustum so horizontal town view stays readable", () => {
+    const desktop = computeOrthoFrustum(1920, 1080, 12);
+    expect(desktop.top).toBe(12);
+    expect(desktop.right).toBeCloseTo(21.333, 2);
+
+    const portrait = computeOrthoFrustum(390, 844, 12);
+    expect(portrait.top).toBeGreaterThan(18);
+    expect(portrait.right).toBeGreaterThan(9);
   });
 });

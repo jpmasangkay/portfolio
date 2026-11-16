@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
-import { setMobileDir, triggerMobileInteract } from "@/lib/mobile-input";
+import { triggerMobileInteract } from "@/lib/mobile-input";
 import {
   TOWN_BUILDINGS_LAYOUT,
   findNearestUnvisitedBuilding,
 } from "@/lib/town-buildings";
+import MobileThumbstick from "@/components/MobileThumbstick";
 
 interface TownOverlayProps {
   nearBuilding: { id: BuildingId; name: string; emoji: string } | null;
@@ -47,27 +48,6 @@ const TownOverlay = ({
     visitedBuildings
   );
   const playerMapPos = toMinimapCoords(playerPos.x, playerPos.z);
-
-  const dpadBtnBase: React.CSSProperties = {
-    width: 56,
-    height: 56,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "hsla(255, 20%, 10%, 0.75)",
-    border: "2px solid hsla(38, 85%, 55%, 0.4)",
-    color: "hsl(38, 85%, 55%)",
-    fontFamily: "'Press Start 2P', cursive",
-    fontSize: "16px",
-    cursor: "pointer",
-    touchAction: "none",
-    userSelect: "none",
-    borderRadius: 4,
-    outline: "none",
-    padding: 0,
-    WebkitUserSelect: "none",
-    WebkitTapHighlightColor: "transparent",
-  };
 
   const renderGuideList = (compact: boolean) => (
     <div style={{ display: "flex", flexDirection: "column", gap: compact ? 3 : 4 }}>
@@ -525,129 +505,19 @@ const TownOverlay = ({
         </div>
       </div>
 
-      {/* ========== MOBILE: D-Pad ========== */}
+      {/* ========== MOBILE: Virtual Drag Thumbstick ========== */}
       <div
         className="show-mobile"
-        id="mobile-dpad"
         style={{
           position: "absolute",
           bottom: 24,
-          left: 16,
+          left: 20,
           pointerEvents: "auto",
           touchAction: "none",
           zIndex: 20,
         }}
       >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "56px 56px 56px",
-            gridTemplateRows: "56px 56px 56px",
-            gap: 3,
-          }}
-        >
-          <div />
-          <button
-            type="button"
-            aria-label="Move up"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setMobileDir(0, -1);
-              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
-            }}
-            onPointerUp={(e) => {
-              e.preventDefault();
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onPointerOut={(e) => {
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            style={dpadBtnBase}
-          >
-            ▲
-          </button>
-          <div />
-
-          <button
-            type="button"
-            aria-label="Move left"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setMobileDir(-1, 0);
-              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
-            }}
-            onPointerUp={(e) => {
-              e.preventDefault();
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onPointerOut={(e) => {
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            style={dpadBtnBase}
-          >
-            ◀
-          </button>
-          <div
-            style={{
-              ...dpadBtnBase,
-              background: "hsla(255, 20%, 10%, 0.3)",
-              border: "1px solid hsla(250, 15%, 25%, 0.3)",
-              cursor: "default",
-            }}
-          />
-          <button
-            type="button"
-            aria-label="Move right"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setMobileDir(1, 0);
-              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
-            }}
-            onPointerUp={(e) => {
-              e.preventDefault();
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onPointerOut={(e) => {
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            style={dpadBtnBase}
-          >
-            ▶
-          </button>
-          <div />
-          <button
-            type="button"
-            aria-label="Move down"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setMobileDir(0, 1);
-              e.currentTarget.style.background = "hsla(38, 85%, 55%, 0.35)";
-            }}
-            onPointerUp={(e) => {
-              e.preventDefault();
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onPointerOut={(e) => {
-              setMobileDir(0, 0);
-              e.currentTarget.style.background = "hsla(255, 20%, 10%, 0.75)";
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            style={dpadBtnBase}
-          >
-            ▼
-          </button>
-          <div />
-        </div>
+        <MobileThumbstick />
       </div>
 
       {/* Mobile Interact Button */}
@@ -754,10 +624,6 @@ const TownOverlay = ({
             z-index: 19;
             white-space: nowrap;
           }
-        }
-        #mobile-dpad button {
-          -webkit-tap-highlight-color: transparent;
-          -webkit-touch-callout: none;
         }
       `}</style>
     </div>

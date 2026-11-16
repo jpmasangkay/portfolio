@@ -19,6 +19,29 @@ export const WALK_CYCLE_RAD_PER_SEC = 10.8;
 export const CAMERA_SMOOTH_RATE = 5.0;
 export const MAX_FRAME_DELTA_SEC = 0.05;
 
+/**
+ * Compute orthographic camera frustum half-extents, zooming out gracefully on
+ * portrait viewports so horizontal world visibility remains generous.
+ */
+export function computeOrthoFrustum(
+  width: number,
+  height: number,
+  baseCamSize: number = 12
+): { left: number; right: number; top: number; bottom: number; halfHeight: number } {
+  const safeW = Math.max(1, width);
+  const safeH = Math.max(1, height);
+  const aspect = safeW / safeH;
+  const halfHeight = aspect < 1 ? Math.min(20, 9.2 / aspect) : baseCamSize;
+  const halfWidth = halfHeight * aspect;
+  return {
+    left: -halfWidth,
+    right: halfWidth,
+    top: halfHeight,
+    bottom: -halfHeight,
+    halfHeight,
+  };
+}
+
 export const DEFAULT_WORLD_BOUNDS: WorldBounds = {
   minX: -19,
   maxX: 19,

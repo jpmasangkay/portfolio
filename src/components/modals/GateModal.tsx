@@ -27,9 +27,14 @@ const GateModal = () => {
         You have entered the shadowed domain of <strong style={{ color: "hsl(38, 85%, 55%)" }}>Shealtiel John Paul A. Masangkay</strong>,
         a rogue-class developer who moves through code like shadows — from the realm of {personalInfo.location}.
       </p>
-      <p style={{ ...modalText, fontStyle: "italic", opacity: 0.6, marginBottom: 24 }}>
-        Explore the buildings to discover the rogue's skills, past contracts, and creations.
-        Use WASD to move and press E near buildings to interact.
+      <p style={{ ...modalText, fontStyle: "italic", opacity: 0.72, marginBottom: 24 }}>
+        Explore the buildings to discover the rogue&apos;s skills, past contracts, and creations.{" "}
+        <span className="hide-mobile">
+          Use WASD or Arrow keys to move and press E or Space near buildings to interact.
+        </span>
+        <span className="show-mobile-inline">
+          Drag the thumbstick to move and tap ⚔️ near buildings to interact, or open MAP / Quick View.
+        </span>
       </p>
 
       <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" as const }}>

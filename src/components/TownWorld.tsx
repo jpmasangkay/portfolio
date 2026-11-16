@@ -6,6 +6,7 @@ import {
   CAMERA_SMOOTH_RATE,
   WALK_CYCLE_RAD_PER_SEC,
   clampDeltaSec,
+  computeOrthoFrustum,
   expDampingAlpha,
   resolvePlayerStep,
   type ColliderBox,
@@ -103,12 +104,11 @@ const TownWorld = ({
     scene.background = new THREE.Color(0x161932);
     scene.fog = new THREE.Fog(0x161932, 34, 68);
 
-    // ====== CAMERA (isometric with opening sweep) ======
-    const aspect = window.innerWidth / window.innerHeight;
-    const camSize = 12;
+    // ====== CAMERA (isometric with portrait scaling & opening sweep) ======
+    const frustum = computeOrthoFrustum(window.innerWidth, window.innerHeight, 12);
     const camera = new THREE.OrthographicCamera(
-      -camSize * aspect, camSize * aspect,
-      camSize, -camSize,
+      frustum.left, frustum.right,
+      frustum.top, frustum.bottom,
       0.1, 100
     );
     const prefersReducedMotion =
@@ -2505,9 +2505,11 @@ const TownWorld = ({
     const onResize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      const a = w / h;
-      camera.left = -camSize * a;
-      camera.right = camSize * a;
+      const f = computeOrthoFrustum(w, h, 12);
+      camera.left = f.left;
+      camera.right = f.right;
+      camera.top = f.top;
+      camera.bottom = f.bottom;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
       renderTarget.setSize(Math.floor(w / PIXEL_SCALE), Math.floor(h / PIXEL_SCALE));

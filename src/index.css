@@ -126,18 +126,31 @@ dialog::backdrop {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* D-pad and mobile controls must override body touch-action */
-  #mobile-dpad,
-  #mobile-dpad * {
+  /* Thumbstick and mobile controls must override body touch-action */
+  #mobile-thumbstick,
+  #mobile-thumbstick * {
     touch-action: none !important;
     -webkit-touch-callout: none !important;
     -webkit-user-select: none !important;
     user-select: none !important;
   }
 
-  /* Prevent interaction prompt from overlapping D-pad area */
+  /* Prevent interaction prompt from overlapping thumbstick area */
   #interaction-prompt {
-    bottom: 220px !important;
+    bottom: 185px !important;
+  }
+}
+
+.show-mobile-inline {
+  display: none;
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .show-mobile-inline {
+    display: inline;
+  }
+  .hide-mobile {
+    display: none !important;
   }
 }
 
