@@ -22,8 +22,11 @@ describe("Portfolio modals", () => {
     expect(link).toHaveAttribute("href", "https://github.com/jpmasangkay/grimoire");
   });
 
-  it("renders skill tiers and tools in WizardTowerModal", () => {
-    render(<WizardTowerModal />);
+  it("renders skill tiers, character sheet attributes, and tools in WizardTowerModal", () => {
+    render(<WizardTowerModal level={4} xp={650} nextLevelXp={900} title="Arcane Scholar" />);
+    expect(screen.getByText(/CHARACTER SHEET/i)).toBeInTheDocument();
+    expect(screen.getByText(/LV 4/)).toBeInTheDocument();
+    expect(screen.getByText(/650\/900 XP/)).toBeInTheDocument();
     expect(screen.getByText("TypeScript")).toBeInTheDocument();
     expect(screen.getByText("React")).toBeInTheDocument();
     expect(screen.getByText("Blender")).toBeInTheDocument();

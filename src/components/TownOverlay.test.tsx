@@ -32,6 +32,8 @@ describe("TownOverlay and QuickViewPortfolio", () => {
     expect(screen.getByText(/1\/8 visited/)).toBeInTheDocument();
     expect(screen.getByText(/Town Square/i)).toBeInTheDocument();
     expect(screen.getByText(/Rowan — Town Greeter/i)).toBeInTheDocument();
+    expect(screen.getByText(/⭐ LV 1/)).toBeInTheDocument();
+    expect(screen.getByText(/🔮 0\/5/)).toBeInTheDocument();
 
     const towerBtns = screen.getAllByRole("button", { name: /Tower/i });
     fireEvent.click(towerBtns[0]);
@@ -93,6 +95,48 @@ describe("TownOverlay and QuickViewPortfolio", () => {
 
     expect(screen.getByText(/Reward Unlocked: Royal Cloak & Hire Me Scroll/i)).toBeInTheDocument();
     expect(screen.getByText(/Archmage-Rogue Royal Cloak/i)).toBeInTheDocument();
+  });
+
+  it("supports night pin toggle and walk-in interior leave button", () => {
+    const onToggleNightPin = vi.fn();
+    const onExitInterior = vi.fn();
+
+    render(
+      <TownOverlay
+        nearBuilding={null}
+        currentInterior="tavern"
+        nearInteriorAction={{
+          id: "tavern-dossier",
+          label: "Adventurer's Dossier",
+          emoji: "📖",
+          actionType: "modal",
+          buildingId: "tavern",
+        }}
+        level={3}
+        xp={425}
+        secretsFoundCount={2}
+        totalSecretsCount={5}
+        nightPinned={true}
+        modalOpen={false}
+        visitedBuildings={new Set(["tavern"])}
+        playerPos={{ x: 0, z: 72 }}
+        onSelectBuilding={vi.fn()}
+        onToggleQuickView={vi.fn()}
+        onToggleNightPin={onToggleNightPin}
+        onExitInterior={onExitInterior}
+      />
+    );
+
+    expect(screen.getByText(/⭐ LV 3/)).toBeInTheDocument();
+    expect(screen.getByText(/🔮 2\/5/)).toBeInTheDocument();
+    expect(screen.getByText(/Inside The Tavern/i)).toBeInTheDocument();
+    expect(screen.getByText(/Adventurer's Dossier/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /📌 Night/i }));
+    expect(onToggleNightPin).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Leave Room/i }));
+    expect(onExitInterior).toHaveBeenCalledTimes(1);
   });
 
   it("renders all portfolio sections in QuickViewPortfolio and allows returning", () => {

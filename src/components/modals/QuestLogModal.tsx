@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { personalInfo, type BuildingId } from "@/data/portfolio-data";
+import { SECRET_FINDS } from "@/lib/realm-progression";
 import { TOWN_BUILDINGS_LAYOUT } from "@/lib/town-buildings";
 import { ZONE_METADATA, type ZoneId } from "@/lib/town-zones";
 
 interface QuestLogModalProps {
   visitedBuildings: ReadonlySet<BuildingId>;
   visitedZones: ReadonlySet<ZoneId>;
+  foundSecrets?: ReadonlySet<string>;
+  level?: number;
+  xp?: number;
+  title?: string;
   greetedByRowan: boolean;
   cloakEquipped: boolean;
   onToggleCloak: () => void;
@@ -23,6 +28,10 @@ const modalText: React.CSSProperties = {
 const QuestLogModal = ({
   visitedBuildings,
   visitedZones,
+  foundSecrets = new Set<string>(),
+  level = 1,
+  xp = 0,
+  title = "Novice Wanderer",
   greetedByRowan,
   cloakEquipped,
   onToggleCloak,
@@ -189,6 +198,71 @@ const QuestLogModal = ({
             );
           })}
         </div>
+
+        <div
+          style={{
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: "1px solid hsla(250, 15%, 26%, 0.65)",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ ...modalText, fontSize: 13.5, display: "flex", justifyContent: "space-between" }}>
+            <span>🔮 Uncover Hidden Secrets</span>
+            <span
+              style={{
+                color:
+                  foundSecrets.size === SECRET_FINDS.length
+                    ? "hsl(150, 60%, 58%)"
+                    : "hsl(38, 85%, 60%)",
+              }}
+            >
+              {foundSecrets.size}/{SECRET_FINDS.length}
+            </span>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            {SECRET_FINDS.map((sec) => {
+              const collected = foundSecrets.has(sec.id);
+              return (
+                <div
+                  key={sec.id}
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    fontSize: 12,
+                    padding: "5px 8px",
+                    border: "1px solid hsl(250, 15%, 23%)",
+                    background: collected
+                      ? "hsla(150, 35%, 14%, 0.4)"
+                      : "hsla(252, 18%, 10%, 0.65)",
+                    color: collected ? "hsl(150, 60%, 70%)" : "hsl(250, 10%, 62%)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                  }}
+                >
+                  <span>
+                    {collected ? `${sec.emoji} ${sec.name}` : `❓ ${sec.hint}`}
+                  </span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    {collected ? "✓" : "+75 XP"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <p
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11.5,
+            color: "hsl(38, 85%, 62%)",
+            marginTop: 4,
+          }}
+        >
+          Current Standing: LV {level} ({title}) · {xp} XP
+        </p>
       </div>
 
       {/* Completion Reward: Royal Cloak + "Hire Me" Scroll */}

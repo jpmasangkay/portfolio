@@ -10,8 +10,8 @@ import {
   expDampingAlpha,
   resolvePlayerStep,
   type ColliderBox,
+  type WorldBounds,
 } from "@/lib/town-physics";
-
 import {
   TOWN_BUILDINGS_LAYOUT,
   type TownBuildingLayout,
@@ -24,15 +24,38 @@ import {
   type ZoneId,
 } from "@/lib/town-zones";
 import { VILLAGERS, type VillagerDef } from "@/data/villagers";
+import {
+  SECRET_FINDS,
+  WALKIN_BUILDINGS,
+  type InteriorId,
+  type SecretFindDef,
+} from "@/lib/realm-progression";
+import { computeDayNightState, type DayNightState } from "@/lib/day-night";
+
+export interface InteriorActionPrompt {
+  id: string;
+  label: string;
+  emoji: string;
+  actionType: "modal" | "exit";
+  buildingId?: BuildingId;
+}
 
 interface TownWorldProps {
   onInteract: (buildingId: BuildingId) => void;
   onNearBuilding: (building: { id: BuildingId; name: string; emoji: string } | null) => void;
   onTalkVillager?: (villager: VillagerDef) => void;
   onNearVillager?: (villager: VillagerDef | null) => void;
+  onNearSecret?: (secret: SecretFindDef | null) => void;
+  onCollectSecret?: (secret: SecretFindDef) => void;
   onZoneChange?: (zone: ZoneId) => void;
   onPlayerPosChange?: (pos: { x: number; z: number }) => void;
+  onInteriorChange?: (interior: InteriorId | null) => void;
+  onNearInteriorAction?: (action: InteriorActionPrompt | null) => void;
+  onTimeInfoChange?: (info: { label: DayNightState["label"]; emoji: string; raining: boolean }) => void;
+  foundSecrets?: ReadonlySet<string>;
   cloakEquipped?: boolean;
+  nightPinned?: boolean;
+  exitInteriorSignal?: number;
   modalOpen: boolean;
   paused?: boolean;
 }
@@ -42,16 +65,39 @@ const BUILDINGS: BuildingDef[] = TOWN_BUILDINGS_LAYOUT;
 
 const INTERACT_DISTANCE = 4.5;
 const VILLAGER_INTERACT_DISTANCE = 2.6;
+const SECRET_INTERACT_DISTANCE = 2.4;
 const PIXEL_SCALE = 3; // render at 1/3 resolution for pixel art
+const DAY_CYCLE_DURATION_SEC = 180;
+
+const TAVERN_INTERIOR_BOUNDS: WorldBounds = {
+  minX: -4.2,
+  maxX: 4.2,
+  minZ: 68.8,
+  maxZ: 75.8,
+};
+const WIZARD_INTERIOR_BOUNDS: WorldBounds = {
+  minX: 27.8,
+  maxX: 36.2,
+  minZ: 68.8,
+  maxZ: 75.8,
+};
 
 const TownWorld = ({
   onInteract,
   onNearBuilding,
   onTalkVillager,
   onNearVillager,
+  onNearSecret,
+  onCollectSecret,
   onZoneChange,
   onPlayerPosChange,
+  onInteriorChange,
+  onNearInteriorAction,
+  onTimeInfoChange,
+  foundSecrets,
   cloakEquipped = false,
+  nightPinned = true,
+  exitInteriorSignal = 0,
   modalOpen,
   paused = false,
 }: TownWorldProps) => {
@@ -60,26 +106,70 @@ const TownWorld = ({
   const playerPosRef = useRef(new THREE.Vector3(0, 0, 8.0));
   const nearBuildingRef = useRef<BuildingDef | null>(null);
   const nearVillagerRef = useRef<VillagerDef | null>(null);
+  const nearSecretRef = useRef<SecretFindDef | null>(null);
+  const nearInteriorActionRef = useRef<InteriorActionPrompt | null>(null);
   const currentZoneRef = useRef<ZoneId>("town");
+  const currentInteriorRef = useRef<InteriorId | null>(null);
+  const savedOutdoorPosRef = useRef<{ x: number; z: number }>({ x: 0, z: 8.0 });
+  const exitRequestFnRef = useRef<(() => void) | null>(null);
+  const enterInteriorFnRef = useRef<((id: InteriorId) => void) | null>(null);
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen || paused);
   const pausedRef = useRef(paused);
   const cloakEquippedRef = useRef(cloakEquipped);
+  const nightPinnedRef = useRef(nightPinned);
+  const foundSecretsRef = useRef<ReadonlySet<string>>(foundSecrets ?? new Set());
   const onPlayerPosChangeRef = useRef(onPlayerPosChange);
   const onTalkVillagerRef = useRef(onTalkVillager);
   const onNearVillagerRef = useRef(onNearVillager);
+  const onNearSecretRef = useRef(onNearSecret);
+  const onCollectSecretRef = useRef(onCollectSecret);
   const onZoneChangeRef = useRef(onZoneChange);
+  const onInteriorChangeRef = useRef(onInteriorChange);
+  const onNearInteriorActionRef = useRef(onNearInteriorAction);
+  const onTimeInfoChangeRef = useRef(onTimeInfoChange);
 
   useEffect(() => {
     onPlayerPosChangeRef.current = onPlayerPosChange;
     onTalkVillagerRef.current = onTalkVillager;
     onNearVillagerRef.current = onNearVillager;
+    onNearSecretRef.current = onNearSecret;
+    onCollectSecretRef.current = onCollectSecret;
     onZoneChangeRef.current = onZoneChange;
-  }, [onPlayerPosChange, onTalkVillager, onNearVillager, onZoneChange]);
+    onInteriorChangeRef.current = onInteriorChange;
+    onNearInteriorActionRef.current = onNearInteriorAction;
+    onTimeInfoChangeRef.current = onTimeInfoChange;
+  }, [
+    onPlayerPosChange,
+    onTalkVillager,
+    onNearVillager,
+    onNearSecret,
+    onCollectSecret,
+    onZoneChange,
+    onInteriorChange,
+    onNearInteriorAction,
+    onTimeInfoChange,
+  ]);
 
   useEffect(() => {
     cloakEquippedRef.current = cloakEquipped;
   }, [cloakEquipped]);
+
+  useEffect(() => {
+    nightPinnedRef.current = nightPinned;
+  }, [nightPinned]);
+
+  useEffect(() => {
+    if (foundSecrets) {
+      foundSecretsRef.current = foundSecrets;
+    }
+  }, [foundSecrets]);
+
+  useEffect(() => {
+    if (exitInteriorSignal > 0 && currentInteriorRef.current !== null) {
+      exitRequestFnRef.current?.();
+    }
+  }, [exitInteriorSignal]);
 
   // Keep modalOpen / paused ref in sync and release held inputs when paused or modal opens
   useEffect(() => {
@@ -93,6 +183,27 @@ const TownWorld = ({
 
   const handleInteract = useCallback(() => {
     if (modalOpenRef.current) return;
+    if (currentInteriorRef.current !== null) {
+      const action = nearInteriorActionRef.current;
+      if (action?.actionType === "exit") {
+        exitRequestFnRef.current?.();
+        return;
+      }
+      if (action?.actionType === "modal" && action.buildingId) {
+        onInteract(action.buildingId);
+        return;
+      }
+      // Fallback: interacting anywhere inside room inspects the room's showcase modal
+      onInteract(currentInteriorRef.current);
+      return;
+    }
+    const nearSecret = nearSecretRef.current;
+    if (nearSecret && !foundSecretsRef.current.has(nearSecret.id)) {
+      onCollectSecretRef.current?.(nearSecret);
+      nearSecretRef.current = null;
+      onNearSecretRef.current?.(null);
+      return;
+    }
     const nearNpc = nearVillagerRef.current;
     const nearBld = nearBuildingRef.current;
     if (nearNpc) {
@@ -100,6 +211,10 @@ const TownWorld = ({
       return;
     }
     if (nearBld) {
+      if (WALKIN_BUILDINGS.has(nearBld.id) && enterInteriorFnRef.current) {
+        enterInteriorFnRef.current(nearBld.id as InteriorId);
+        return;
+      }
       onInteract(nearBld.id);
     }
   }, [onInteract]);
@@ -2608,6 +2723,266 @@ const TownWorld = ({
     playerGroup.castShadow = true;
     scene.add(playerGroup);
 
+    // ====== COMPANION FAMILIAR (Arcane Pixel Owl) ======
+    const familiarGroup = new THREE.Group();
+    const familiarBodyMat = new THREE.MeshLambertMaterial({ color: 0x6b58a6 });
+    const familiarWingMat = new THREE.MeshLambertMaterial({ color: 0x8b76c8 });
+    const familiarEyeMat = new THREE.MeshBasicMaterial({ color: 0xffd15c });
+    const familiarBody = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.28), familiarBodyMat);
+    familiarGroup.add(familiarBody);
+    const familiarBelly = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.04), new THREE.MeshLambertMaterial({ color: 0xe8dfc8 }));
+    familiarBelly.position.set(0, -0.02, 0.14);
+    familiarGroup.add(familiarBelly);
+    const familiarEyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), familiarEyeMat);
+    familiarEyeL.position.set(-0.07, 0.07, 0.14);
+    familiarGroup.add(familiarEyeL);
+    const familiarEyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), familiarEyeMat);
+    familiarEyeR.position.set(0.07, 0.07, 0.14);
+    familiarGroup.add(familiarEyeR);
+    const familiarBeak = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.06), familiarEyeMat);
+    familiarBeak.position.set(0, 0.02, 0.16);
+    familiarGroup.add(familiarBeak);
+    const famWingL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.18), familiarWingMat);
+    famWingL.position.set(-0.24, 0.02, 0);
+    familiarGroup.add(famWingL);
+    const famWingR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.18), familiarWingMat);
+    famWingR.position.set(0.24, 0.02, 0);
+    familiarGroup.add(famWingR);
+    familiarGroup.position.set(playerPosRef.current.x + 0.9, 1.5, playerPosRef.current.z + 0.9);
+    scene.add(familiarGroup);
+
+    // ====== 5 HIDDEN SECRETS (world pickups) ======
+    const secretItems: {
+      def: SecretFindDef;
+      group: THREE.Group;
+      accent: THREE.Mesh;
+      ring: THREE.Mesh;
+      ringMat: THREE.MeshBasicMaterial;
+    }[] = [];
+    const secretRingGeo = new THREE.RingGeometry(0.45, 0.58, 12);
+    for (const def of SECRET_FINDS) {
+      const sGroup = new THREE.Group();
+      sGroup.position.set(def.x, def.y, def.z);
+      let accent: THREE.Mesh;
+      if (def.id === "tavern-coin") {
+        accent = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.26, 0.26, 0.08, 10),
+          new THREE.MeshBasicMaterial({ color: 0xf7c948 })
+        );
+        accent.rotation.x = Math.PI / 2;
+        sGroup.add(accent);
+      } else if (def.id === "stray-cat") {
+        const catBlack = new THREE.MeshLambertMaterial({ color: 0x1d1d26 });
+        const catWhite = new THREE.MeshLambertMaterial({ color: 0xf0ece0 });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.28, 0.62), catBlack);
+        body.position.y = 0.22;
+        sGroup.add(body);
+        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.1), catWhite);
+        chest.position.set(0, 0.2, 0.29);
+        sGroup.add(chest);
+        const catHead = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.28), catBlack);
+        catHead.position.set(0, 0.44, 0.2);
+        sGroup.add(catHead);
+        const earGeo = new THREE.BoxGeometry(0.08, 0.1, 0.08);
+        const earL = new THREE.Mesh(earGeo, catBlack);
+        earL.position.set(-0.1, 0.6, 0.2);
+        sGroup.add(earL);
+        const earR = new THREE.Mesh(earGeo, catBlack);
+        earR.position.set(0.1, 0.6, 0.2);
+        sGroup.add(earR);
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), catWhite);
+        tail.position.set(0, 0.34, -0.32);
+        tail.rotation.x = -0.5;
+        sGroup.add(tail);
+        accent = tail;
+        const catEyes = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.05, 0.03),
+          new THREE.MeshBasicMaterial({ color: 0x62f59a })
+        );
+        catEyes.position.set(0, 0.45, 0.34);
+        sGroup.add(catEyes);
+      } else if (def.id === "forest-shard") {
+        accent = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.32, 0),
+          new THREE.MeshBasicMaterial({ color: 0x5ae2ff })
+        );
+        accent.position.y = 0.2;
+        sGroup.add(accent);
+      } else if (def.id === "lakeside-bottle") {
+        accent = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.16, 0.2, 0.48, 8),
+          new THREE.MeshBasicMaterial({ color: 0x5be3b8 })
+        );
+        accent.rotation.z = 0.45;
+        accent.position.y = 0.15;
+        sGroup.add(accent);
+      } else {
+        // Ruins treasure chest
+        const chestBase = new THREE.Mesh(
+          new THREE.BoxGeometry(0.75, 0.45, 0.55),
+          new THREE.MeshLambertMaterial({ color: 0x6b4122 })
+        );
+        chestBase.position.y = 0.22;
+        sGroup.add(chestBase);
+        accent = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.16, 0.58),
+          new THREE.MeshBasicMaterial({ color: 0xf4c542 })
+        );
+        accent.position.y = 0.38;
+        sGroup.add(accent);
+      }
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffdc66,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.45,
+      });
+      const ring = new THREE.Mesh(secretRingGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.04;
+      sGroup.add(ring);
+      scene.add(sGroup);
+      secretItems.push({ def, group: sGroup, accent, ring, ringMat });
+    }
+
+    // ====== WALK-IN INTERIORS (Tavern & Wizard's Tower Cutaway Rooms) ======
+    const tavernInteriorColliders: ColliderBox[] = [];
+    const wizardInteriorColliders: ColliderBox[] = [];
+
+    const buildInteriorShell = (
+      cx: number,
+      cz: number,
+      floorColor: number,
+      wallColor: number,
+      trimColor: number,
+      rugColor: number
+    ) => {
+      const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(9.2, 0.3, 7.8),
+        new THREE.MeshLambertMaterial({ color: floorColor })
+      );
+      floor.position.set(cx, -0.15, cz);
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      const backWall = new THREE.Mesh(
+        new THREE.BoxGeometry(9.2, 4.2, 0.35),
+        new THREE.MeshLambertMaterial({ color: wallColor })
+      );
+      backWall.position.set(cx, 2.1, cz - 3.9);
+      scene.add(backWall);
+
+      const leftWall = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 4.2, 7.8),
+        new THREE.MeshLambertMaterial({ color: trimColor })
+      );
+      leftWall.position.set(cx - 4.6, 2.1, cz);
+      scene.add(leftWall);
+
+      const rug = new THREE.Mesh(
+        new THREE.BoxGeometry(4.4, 0.04, 3.6),
+        new THREE.MeshLambertMaterial({ color: rugColor })
+      );
+      rug.position.set(cx, 0.02, cz + 0.6);
+      scene.add(rug);
+
+      const exitMat = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 0.06, 1.0),
+        new THREE.MeshBasicMaterial({ color: 0xf0c248 })
+      );
+      exitMat.position.set(cx, 0.03, cz + 3.2);
+      scene.add(exitMat);
+    };
+
+    // --- 1) The Tavern Interior centered at (0, 0, 72) ---
+    buildInteriorShell(0, 72, 0x5c3c24, 0x6f4b2f, 0x4b311d, 0x7b2d2d);
+    const barCounter = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 1.1, 1.0),
+      new THREE.MeshLambertMaterial({ color: 0x3b2414 })
+    );
+    barCounter.position.set(2.2, 0.55, 69.8);
+    scene.add(barCounter);
+    tavernInteriorColliders.push({ minX: 0.4, maxX: 4.0, minZ: 69.2, maxZ: 70.4, label: "tavern-bar" });
+
+    const dossierDesk = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 0.9, 1.2),
+      new THREE.MeshLambertMaterial({ color: 0x7a5230 })
+    );
+    dossierDesk.position.set(-2.0, 0.45, 70.1);
+    scene.add(dossierDesk);
+    const dossierBook = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.14, 0.55),
+      new THREE.MeshBasicMaterial({ color: 0xf4c855 })
+    );
+    dossierBook.position.set(-2.0, 0.96, 70.1);
+    scene.add(dossierBook);
+    tavernInteriorColliders.push({ minX: -3.0, maxX: -1.0, minZ: 69.5, maxZ: 70.7, label: "tavern-desk" });
+
+    const tavernHearth = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 2.4, 0.8),
+      new THREE.MeshLambertMaterial({ color: 0x4a4552 })
+    );
+    tavernHearth.position.set(-4.1, 1.2, 72.2);
+    scene.add(tavernHearth);
+    const hearthEmbers = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.4, 0.5),
+      new THREE.MeshBasicMaterial({ color: 0xff7722 })
+    );
+    hearthEmbers.position.set(-3.75, 0.3, 72.2);
+    scene.add(hearthEmbers);
+    tavernInteriorColliders.push({ minX: -4.4, maxX: -3.4, minZ: 71.7, maxZ: 72.7, label: "tavern-hearth" });
+
+    // --- 2) Wizard's Tower Interior centered at (32, 0, 72) ---
+    buildInteriorShell(32, 72, 0x2b2844, 0x3f3660, 0x2e2748, 0x3c527a);
+    const orbPedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.7, 1.1, 8),
+      new THREE.MeshLambertMaterial({ color: 0x4b446e })
+    );
+    orbPedestal.position.set(32, 0.55, 70.2);
+    scene.add(orbPedestal);
+    const interiorScryOrb = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.45, 0),
+      new THREE.MeshBasicMaterial({ color: 0xbb77ff })
+    );
+    interiorScryOrb.position.set(32, 1.65, 70.2);
+    scene.add(interiorScryOrb);
+    wizardInteriorColliders.push({ minX: 31.3, maxX: 32.7, minZ: 69.5, maxZ: 70.9, label: "wizard-pedestal" });
+
+    const bookshelf = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 2.4, 0.75),
+      new THREE.MeshLambertMaterial({ color: 0x513826 })
+    );
+    bookshelf.position.set(34.6, 1.2, 68.7);
+    scene.add(bookshelf);
+    const tomeAccent = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.35, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0x5ae2ff })
+    );
+    tomeAccent.position.set(34.6, 1.5, 69.1);
+    scene.add(tomeAccent);
+    wizardInteriorColliders.push({ minX: 33.2, maxX: 36.0, minZ: 68.4, maxZ: 69.4, label: "wizard-bookshelf" });
+
+    // ====== GENTLE ATMOSPHERIC RAIN (lightweight single Points pass) ======
+    const rainCount = 96;
+    const rainGeo = new THREE.BufferGeometry();
+    const rainPositions = new Float32Array(rainCount * 3);
+    for (let i = 0; i < rainCount; i++) {
+      rainPositions[i * 3] = (Math.random() - 0.5) * 34;
+      rainPositions[i * 3 + 1] = Math.random() * 14 + 1;
+      rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 34;
+    }
+    rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+    const rainMat = new THREE.PointsMaterial({
+      color: 0x8cc8ff,
+      size: 0.22,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+    });
+    const rainPoints = new THREE.Points(rainGeo, rainMat);
+    rainPoints.visible = false;
+    scene.add(rainPoints);
+
     // ====== LIGHTING (high-contrast moonlit night mood) ======
     // Ambient — low enough to keep crisp face/shadow contrast while preserving night readability
     const ambient = new THREE.AmbientLight(0x5a6cb2, 0.95);
@@ -2754,12 +3129,65 @@ const TownWorld = ({
     let elapsed = 0;
     let walkCycle = 0;
     let lastPosEmitTime = 0;
+    let lastTimeEmitTime = 0;
     let lastEmittedX = playerPosRef.current.x;
     let lastEmittedZ = playerPosRef.current.z;
     onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
 
     const targetFogColor = new THREE.Color(ZONE_METADATA.town.fogColorHex);
+    const cycleTintColor = new THREE.Color(0x161932);
+    const lanternDayColor = new THREE.Color(0x555c6e);
+    const lanternNightColor = new THREE.Color(0xffcc44);
     let lastCloakState = cloakEquippedRef.current;
+    let familiarPosX = familiarGroup.position.x;
+    let familiarPosZ = familiarGroup.position.z;
+
+    const snapCameraAndFamiliar = () => {
+      const px = playerPosRef.current.x;
+      const pz = playerPosRef.current.z;
+      const elev = currentInteriorRef.current ? 0 : getGroundElevation(px, pz);
+      playerGroup.position.set(px, elev, pz);
+      familiarPosX = px + 0.9;
+      familiarPosZ = pz + 0.9;
+      familiarGroup.position.set(familiarPosX, elev + 1.45, familiarPosZ);
+      camLookTarget.set(px, 0, pz);
+      camera.position.set(px + followOffset.x, followOffset.y, pz + followOffset.z);
+      camera.lookAt(camLookTarget);
+      sweepDone = true;
+    };
+
+    enterInteriorFnRef.current = (id: InteriorId) => {
+      savedOutdoorPosRef.current = { x: playerPosRef.current.x, z: playerPosRef.current.z };
+      currentInteriorRef.current = id;
+      const roomCenterX = id === "tavern" ? 0 : 32;
+      playerPosRef.current.set(roomCenterX, 0, 74.2);
+      playerGroup.rotation.y = Math.PI;
+      nearBuildingRef.current = null;
+      nearVillagerRef.current = null;
+      nearSecretRef.current = null;
+      onNearBuilding(null);
+      onNearVillagerRef.current?.(null);
+      onNearSecretRef.current?.(null);
+      snapCameraAndFamiliar();
+      onInteriorChangeRef.current?.(id);
+    };
+
+    exitRequestFnRef.current = () => {
+      const prevId = currentInteriorRef.current;
+      currentInteriorRef.current = null;
+      nearInteriorActionRef.current = null;
+      onNearInteriorActionRef.current?.(null);
+      const fallback =
+        prevId === "tavern"
+          ? { x: -8, z: 11.4 }
+          : prevId === "wizard"
+          ? { x: 0, z: -6.8 }
+          : savedOutdoorPosRef.current;
+      playerPosRef.current.set(fallback.x, 0, fallback.z);
+      playerGroup.rotation.y = 0;
+      snapCameraAndFamiliar();
+      onInteriorChangeRef.current?.(null);
+    };
 
     const animate = (now: number) => {
       animFrameRef.current = requestAnimationFrame(animate);
@@ -2771,6 +3199,7 @@ const TownWorld = ({
       lastTime = now;
       elapsed += dt;
       const keys = keysRef.current;
+      const insideRoom = currentInteriorRef.current;
 
       // ---- Sync Royal Cloak appearance if toggled ----
       if (cloakEquippedRef.current !== lastCloakState) {
@@ -2781,19 +3210,23 @@ const TownWorld = ({
           scarfMat.color.setHex(0xf5c842);
           playerAuraMat.color.setHex(0x55ee99);
           playerAuraMat.opacity = 0.55;
+          familiarBodyMat.color.setHex(0x287654);
+          familiarWingMat.color.setHex(0xf2c94c);
         } else {
           cloakHoodMat.color.setHex(0x283044);
           capeMat.color.setHex(0x2b354d);
           scarfMat.color.setHex(0xd9483b);
           playerAuraMat.color.setHex(0xf0c248);
           playerAuraMat.opacity = 0.42;
+          familiarBodyMat.color.setHex(0x6b58a6);
+          familiarWingMat.color.setHex(0x8b76c8);
         }
       }
 
       // ---- Update patrolling villagers ----
       const dynamicNpcColliders: ColliderBox[] = [];
       for (const vr of villagerRuntimes) {
-        if (vr.def.patrolTo) {
+        if (!insideRoom && vr.def.patrolTo) {
           const dest = vr.targetIdx === 1 ? vr.def.patrolTo : { x: vr.def.x, z: vr.def.z };
           const toX = dest.x - vr.x;
           const toZ = dest.z - vr.z;
@@ -2861,16 +3294,28 @@ const TownWorld = ({
           handleInteract();
         }
 
-        const allColliders = colliders.concat(dynamicNpcColliders);
+        const activeColliders =
+          insideRoom === "tavern"
+            ? tavernInteriorColliders
+            : insideRoom === "wizard"
+            ? wizardInteriorColliders
+            : colliders.concat(dynamicNpcColliders);
+        const activeBounds =
+          insideRoom === "tavern"
+            ? TAVERN_INTERIOR_BOUNDS
+            : insideRoom === "wizard"
+            ? WIZARD_INTERIOR_BOUNDS
+            : EXPANDED_WORLD_BOUNDS;
+
         const step = resolvePlayerStep(
           { x: playerPosRef.current.x, z: playerPosRef.current.z },
           dx,
           dz,
           dt,
-          allColliders,
+          activeColliders,
           undefined,
           undefined,
-          EXPANDED_WORLD_BOUNDS
+          activeBounds
         );
 
         if (step.moved) {
@@ -2936,42 +3381,125 @@ const TownWorld = ({
           cape.position.z = -0.26;
         }
 
-        const playerElev = getGroundElevation(playerPosRef.current.x, playerPosRef.current.z);
+        const playerElev = insideRoom ? 0 : getGroundElevation(playerPosRef.current.x, playerPosRef.current.z);
         playerGroup.position.set(
           playerPosRef.current.x,
           playerElev,
           playerPosRef.current.z
         );
 
-        // Zone check & smooth fog/sky biome transition
-        const detectedZone = detectPlayerZone(playerPosRef.current.x, playerPosRef.current.z);
-        if (detectedZone !== currentZoneRef.current) {
-          currentZoneRef.current = detectedZone;
-          targetFogColor.setHex(ZONE_METADATA[detectedZone].fogColorHex);
-          onZoneChangeRef.current?.(detectedZone);
-        }
+        // Zone check (only outdoors so entering rooms preserves outskirt map context cleanly)
+        if (!insideRoom) {
+          const detectedZone = detectPlayerZone(playerPosRef.current.x, playerPosRef.current.z);
+          if (detectedZone !== currentZoneRef.current) {
+            currentZoneRef.current = detectedZone;
+            onZoneChangeRef.current?.(detectedZone);
+          }
 
-        if (
-          now - lastPosEmitTime > 110 &&
-          (Math.abs(playerPosRef.current.x - lastEmittedX) > 0.15 ||
-            Math.abs(playerPosRef.current.z - lastEmittedZ) > 0.15)
-        ) {
-          lastPosEmitTime = now;
-          lastEmittedX = playerPosRef.current.x;
-          lastEmittedZ = playerPosRef.current.z;
-          onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
+          if (
+            now - lastPosEmitTime > 110 &&
+            (Math.abs(playerPosRef.current.x - lastEmittedX) > 0.15 ||
+              Math.abs(playerPosRef.current.z - lastEmittedZ) > 0.15)
+          ) {
+            lastPosEmitTime = now;
+            lastEmittedX = playerPosRef.current.x;
+            lastEmittedZ = playerPosRef.current.z;
+            onPlayerPosChangeRef.current?.({ x: lastEmittedX, z: lastEmittedZ });
+          }
         }
       } else {
         sweepDone = true;
       }
 
-      // Smoothly transition fog & background on zone transitions
+      // ---- Day/Night cycle & optional gentle weather ----
+      const dayNight = computeDayNightState(elapsed / DAY_CYCLE_DURATION_SEC, nightPinnedRef.current);
+      const isRaining = !insideRoom && !prefersReducedMotion && (elapsed % 60) > 36;
+      ambient.intensity = insideRoom ? 1.35 : dayNight.ambientIntensity;
+      moon.intensity = insideRoom ? 1.65 : dayNight.dirIntensity;
+      moon.color.setHex(insideRoom ? 0xffe4b8 : dayNight.dirColorHex);
+      moon.position.y = insideRoom ? 28 : dayNight.sunHeight;
+      lanternGlassMat.color.copy(lanternDayColor).lerp(lanternNightColor, dayNight.lanternFactor);
+
+      if (insideRoom) {
+        targetFogColor.setHex(insideRoom === "tavern" ? 0x19121a : 0x141226);
+      } else {
+        const zoneHex = ZONE_METADATA[currentZoneRef.current].fogColorHex;
+        targetFogColor.setHex(zoneHex);
+        cycleTintColor.setHex(dayNight.skyTintHex);
+        targetFogColor.lerp(cycleTintColor, 0.55);
+      }
+
+      if (now - lastTimeEmitTime > 950) {
+        lastTimeEmitTime = now;
+        onTimeInfoChangeRef.current?.({
+          label: dayNight.label,
+          emoji: dayNight.emoji,
+          raining: isRaining,
+        });
+      }
+
+      // Smoothly transition fog & background on zone/time transitions
       if (scene.fog instanceof THREE.Fog) {
         scene.fog.color.lerp(targetFogColor, expDampingAlpha(3.2, dt));
       }
       if (scene.background instanceof THREE.Color) {
         scene.background.lerp(targetFogColor, expDampingAlpha(3.2, dt));
       }
+
+      // Update gentle rain overlay around player
+      rainPoints.visible = isRaining;
+      if (isRaining) {
+        const rp = rainGeo.attributes.position.array as Float32Array;
+        for (let i = 0; i < rainCount; i++) {
+          rp[i * 3 + 1] -= 14 * dt;
+          if (rp[i * 3 + 1] < 0) {
+            rp[i * 3] = playerPosRef.current.x + (Math.random() - 0.5) * 32;
+            rp[i * 3 + 1] = 13 + Math.random() * 4;
+            rp[i * 3 + 2] = playerPosRef.current.z + (Math.random() - 0.5) * 32;
+          }
+        }
+        rainGeo.attributes.position.needsUpdate = true;
+      }
+
+      // ---- Companion Familiar trailing & flapping ----
+      const yaw = playerGroup.rotation.y;
+      const famTargetX = playerPosRef.current.x - Math.sin(yaw) * 1.05 + Math.cos(yaw) * 0.65;
+      const famTargetZ = playerPosRef.current.z - Math.cos(yaw) * 1.05 - Math.sin(yaw) * 0.65;
+      const famAlpha = expDampingAlpha(4.8, dt);
+      familiarPosX += (famTargetX - familiarPosX) * famAlpha;
+      familiarPosZ += (famTargetZ - familiarPosZ) * famAlpha;
+      const famElev = insideRoom ? 0 : getGroundElevation(familiarPosX, familiarPosZ);
+      familiarGroup.position.set(
+        familiarPosX,
+        famElev + 1.48 + Math.sin(elapsed * 3.4) * 0.12,
+        familiarPosZ
+      );
+      familiarGroup.rotation.y = yaw;
+      const flap = Math.sin(elapsed * 9) * 0.42;
+      famWingL.rotation.z = flap;
+      famWingR.rotation.z = -flap;
+
+      // ---- Secret collectibles animation ----
+      for (const item of secretItems) {
+        const collected = foundSecretsRef.current.has(item.def.id);
+        if (item.def.id === "stray-cat") {
+          item.accent.rotation.x = -0.5 + Math.sin(elapsed * (collected ? 5 : 2.5)) * 0.25;
+          item.ringMat.opacity = collected ? 0.12 : 0.35 + Math.sin(elapsed * 3) * 0.15;
+          item.ringMat.color.setHex(collected ? 0x55dd88 : 0xffdc66);
+        } else {
+          item.group.visible = !collected;
+          if (!collected) {
+            item.accent.rotation.y = elapsed * 1.8;
+            item.accent.position.y = 0.22 + Math.sin(elapsed * 2.6) * 0.08;
+            item.ringMat.opacity = 0.3 + Math.sin(elapsed * 3) * 0.18;
+          }
+        }
+      }
+
+      // ---- Interior orb / flame flicker ----
+      interiorScryOrb.rotation.y = elapsed * 1.4;
+      interiorScryOrb.position.y = 1.65 + Math.sin(elapsed * 2.4) * 0.12;
+      hearthEmbers.scale.setScalar(0.9 + Math.sin(elapsed * 6) * 0.12);
 
       // Gently bob lakeside rowboat & hilltop campfire flame
       lakeBoatGroup.position.y = 0.18 + Math.sin(elapsed * 1.8) * 0.04;
@@ -3003,51 +3531,109 @@ const TownWorld = ({
         camera.lookAt(camLookTarget);
       }
 
-      // ---- Proximity check (villagers + buildings) ----
-      let closestVillager: VillagerDef | null = null;
-      let closestNpcDist = VILLAGER_INTERACT_DISTANCE;
-      for (const vr of villagerRuntimes) {
-        const d = Math.hypot(playerPosRef.current.x - vr.x, playerPosRef.current.z - vr.z);
-        if (d < closestNpcDist) {
-          closestNpcDist = d;
-          closestVillager = vr.def;
-        }
-      }
-
-      if (closestVillager?.id !== nearVillagerRef.current?.id) {
-        nearVillagerRef.current = closestVillager;
-        onNearVillagerRef.current?.(closestVillager);
-      }
-
-      let closestBuilding: BuildingDef | null = null;
-      let closestDist = INTERACT_DISTANCE;
-
-      for (const b of BUILDINGS) {
-        const distX = playerPosRef.current.x - b.x;
-        const distZ = playerPosRef.current.z - b.z;
-        const dist = Math.sqrt(distX * distX + distZ * distZ);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestBuilding = b;
-        }
-      }
-
-      if (closestBuilding !== nearBuildingRef.current) {
-        nearBuildingRef.current = closestBuilding;
-        if (closestBuilding) {
-          onNearBuilding({ id: closestBuilding.id, name: closestBuilding.name, emoji: closestBuilding.emoji });
+      // ---- Proximity check (interiors OR secrets -> villagers -> buildings) ----
+      if (insideRoom) {
+        let nextAction: InteriorActionPrompt | null = null;
+        if (playerPosRef.current.z >= 73.6) {
+          nextAction = {
+            id: "exit-interior",
+            label: "Exit to Town Square",
+            emoji: "🚪",
+            actionType: "exit",
+          };
+        } else if (insideRoom === "tavern") {
+          nextAction = {
+            id: "tavern-dossier",
+            label: "Adventurer's Dossier — Bio & Experience",
+            emoji: "📖",
+            actionType: "modal",
+            buildingId: "tavern",
+          };
         } else {
-          onNearBuilding(null);
+          nextAction = {
+            id: "wizard-tome",
+            label: "Arcane Character Tome — Skills & Sheet",
+            emoji: "🔮",
+            actionType: "modal",
+            buildingId: "wizard",
+          };
+        }
+        if (nextAction.id !== nearInteriorActionRef.current?.id) {
+          nearInteriorActionRef.current = nextAction;
+          onNearInteriorActionRef.current?.(nextAction);
+        }
+      } else {
+        if (nearInteriorActionRef.current !== null) {
+          nearInteriorActionRef.current = null;
+          onNearInteriorActionRef.current?.(null);
+        }
+
+        let closestSecret: SecretFindDef | null = null;
+        let closestSecDist = SECRET_INTERACT_DISTANCE;
+        for (const item of secretItems) {
+          if (foundSecretsRef.current.has(item.def.id)) continue;
+          const d = Math.hypot(
+            playerPosRef.current.x - item.def.x,
+            playerPosRef.current.z - item.def.z
+          );
+          if (d < closestSecDist) {
+            closestSecDist = d;
+            closestSecret = item.def;
+          }
+        }
+        if (closestSecret?.id !== nearSecretRef.current?.id) {
+          nearSecretRef.current = closestSecret;
+          onNearSecretRef.current?.(closestSecret);
+        }
+
+        let closestVillager: VillagerDef | null = null;
+        let closestNpcDist = VILLAGER_INTERACT_DISTANCE;
+        for (const vr of villagerRuntimes) {
+          const d = Math.hypot(playerPosRef.current.x - vr.x, playerPosRef.current.z - vr.z);
+          if (d < closestNpcDist) {
+            closestNpcDist = d;
+            closestVillager = vr.def;
+          }
+        }
+
+        if (closestVillager?.id !== nearVillagerRef.current?.id) {
+          nearVillagerRef.current = closestVillager;
+          onNearVillagerRef.current?.(closestVillager);
+        }
+
+        let closestBuilding: BuildingDef | null = null;
+        let closestDist = INTERACT_DISTANCE;
+
+        for (const b of BUILDINGS) {
+          const distX = playerPosRef.current.x - b.x;
+          const distZ = playerPosRef.current.z - b.z;
+          const dist = Math.sqrt(distX * distX + distZ * distZ);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestBuilding = b;
+          }
+        }
+
+        if (closestBuilding !== nearBuildingRef.current) {
+          nearBuildingRef.current = closestBuilding;
+          if (closestBuilding) {
+            onNearBuilding({ id: closestBuilding.id, name: closestBuilding.name, emoji: closestBuilding.emoji });
+          } else {
+            onNearBuilding(null);
+          }
         }
       }
 
-      // ---- Torch flicker ----
+      // ---- Torch flicker (street lanterns scale smoothly with dusk/night) ----
       torchLights.forEach(({ light, baseIntensity }, i) => {
+        const isLantern = baseIntensity <= 1.6;
+        const factor = isLantern ? 0.2 + 0.8 * dayNight.lanternFactor : 1;
         light.intensity =
-          baseIntensity +
-          Math.sin(elapsed * 8 + i * 2) * 0.4 +
-          Math.sin(elapsed * 13 + i * 5) * 0.2 +
-          Math.random() * 0.1;
+          (baseIntensity +
+            Math.sin(elapsed * 8 + i * 2) * 0.4 +
+            Math.sin(elapsed * 13 + i * 5) * 0.2 +
+            Math.random() * 0.1) *
+          factor;
       });
 
       // ---- Fireflies ----

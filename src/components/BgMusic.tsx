@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect } from "react";
+import { setAudioMuted } from "@/lib/sound-engine";
 
 const BGM_VOLUME = 0.25;
+const USER_MUTED_KEY = "shealtiel_bgm_explicit_mute_v1";
 
 const BgMusic = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -15,17 +17,26 @@ const BgMusic = () => {
     audio.preload = "auto";
     audioRef.current = audio;
 
-    // Auto-start music on any user interaction (required by browsers)
+    // Auto-start music on any user interaction unless explicitly muted previously
     const startMusic = () => {
       if (startedRef.current) return;
+      try {
+        if (localStorage.getItem(USER_MUTED_KEY) === "1") return;
+      } catch {
+        // Ignore storage read errors
+      }
       startedRef.current = true;
 
-      audio.play().then(() => {
-        setPlaying(true);
-      }).catch(() => {
-        // Reset so it tries again on next interaction
-        startedRef.current = false;
-      });
+      audio
+        .play()
+        .then(() => {
+          setPlaying(true);
+          setAudioMuted(false);
+        })
+        .catch(() => {
+          // Reset so it tries again on next interaction
+          startedRef.current = false;
+        });
     };
 
     // Attach listeners to start on ANY user gesture
@@ -43,6 +54,7 @@ const BgMusic = () => {
       audio.pause();
       audio.src = "";
       audioRef.current = null;
+      setAudioMuted(true);
     };
   }, []);
 
@@ -53,10 +65,25 @@ const BgMusic = () => {
     if (playing) {
       audio.pause();
       setPlaying(false);
+      setAudioMuted(true);
+      try {
+        localStorage.setItem(USER_MUTED_KEY, "1");
+      } catch {
+        // Ignore storage errors
+      }
     } else {
-      audio.play().then(() => {
-        setPlaying(true);
-      }).catch(() => {});
+      try {
+        localStorage.setItem(USER_MUTED_KEY, "0");
+      } catch {
+        // Ignore storage errors
+      }
+      audio
+        .play()
+        .then(() => {
+          setPlaying(true);
+          setAudioMuted(false);
+        })
+        .catch(() => {});
     }
   };
 

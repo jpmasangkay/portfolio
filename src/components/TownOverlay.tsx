@@ -2,25 +2,40 @@ import { useState } from "react";
 import type { BuildingId } from "@/data/portfolio-data";
 import type { VillagerDef } from "@/data/villagers";
 import { triggerMobileInteract } from "@/lib/mobile-input";
+import type { InteriorId, SecretFindDef } from "@/lib/realm-progression";
 import {
   TOWN_BUILDINGS_LAYOUT,
   findNearestUnvisitedBuilding,
 } from "@/lib/town-buildings";
 import { ZONE_METADATA, type ZoneId } from "@/lib/town-zones";
 import MobileThumbstick from "@/components/MobileThumbstick";
+import type { InteriorActionPrompt } from "@/components/TownWorld";
 
 interface TownOverlayProps {
   nearBuilding: { id: BuildingId; name: string; emoji: string } | null;
   nearVillager?: VillagerDef | null;
+  nearSecret?: SecretFindDef | null;
+  nearInteriorAction?: InteriorActionPrompt | null;
+  currentInterior?: InteriorId | null;
   greetedByRowan?: boolean;
   currentZone?: ZoneId;
   zoneTransitioning?: boolean;
+  level?: number;
+  xp?: number;
+  progressPct?: number;
+  secretsFoundCount?: number;
+  totalSecretsCount?: number;
+  timeInfo?: { label: string; emoji: string; raining: boolean };
+  nightPinned?: boolean;
+  discoveryToast?: string | null;
   modalOpen: boolean;
   visitedBuildings: ReadonlySet<BuildingId>;
   playerPos: { x: number; z: number };
   onSelectBuilding: (buildingId: BuildingId) => void;
   onToggleQuickView: () => void;
   onOpenQuestLog?: () => void;
+  onToggleNightPin?: () => void;
+  onExitInterior?: () => void;
 }
 
 function toMinimapCoords(x: number, z: number): { mx: number; my: number } {
@@ -38,15 +53,28 @@ function toMinimapCoords(x: number, z: number): { mx: number; my: number } {
 const TownOverlay = ({
   nearBuilding,
   nearVillager = null,
+  nearSecret = null,
+  nearInteriorAction = null,
+  currentInterior = null,
   greetedByRowan = true,
   currentZone = "town",
   zoneTransitioning = false,
+  level = 1,
+  xp = 0,
+  progressPct = 0,
+  secretsFoundCount = 0,
+  totalSecretsCount = 5,
+  timeInfo = { label: "Midnight", emoji: "🌙", raining: false },
+  nightPinned = true,
+  discoveryToast = null,
   modalOpen,
   visitedBuildings,
   playerPos,
   onSelectBuilding,
   onToggleQuickView,
   onOpenQuestLog,
+  onToggleNightPin,
+  onExitInterior,
 }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -55,7 +83,9 @@ const TownOverlay = ({
   const visitedCount = visitedBuildings.size;
   const totalCount = TOWN_BUILDINGS_LAYOUT.length;
   const zoneMeta = ZONE_METADATA[currentZone];
-  const hasInteractTarget = Boolean(nearBuilding || nearVillager);
+  const hasInteractTarget = Boolean(
+    nearInteriorAction || nearSecret || nearVillager || nearBuilding
+  );
   const nearestUnvisited = findNearestUnvisitedBuilding(
     playerPos.x,
     playerPos.z,
@@ -196,22 +226,160 @@ const TownOverlay = ({
         >
           Shealtiel Masangkay · CS &amp; Web Developer ({visitedCount}/{totalCount} visited)
         </p>
-        <div style={{ marginTop: 4 }}>
+        <div style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap" }}>
           <span
             id="zone-indicator"
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: 10.5,
-              color: "hsl(150, 50%, 66%)",
+              color: currentInterior ? "hsl(38, 85%, 65%)" : "hsl(150, 50%, 66%)",
               background: "hsla(255, 22%, 8%, 0.72)",
-              border: "1px solid hsla(150, 35%, 36%, 0.55)",
+              border: currentInterior
+                ? "1px solid hsla(38, 85%, 55%, 0.55)"
+                : "1px solid hsla(150, 35%, 36%, 0.55)",
               padding: "2px 8px",
               display: "inline-block",
               letterSpacing: "0.04em",
             }}
           >
-            {zoneMeta.emoji} {zoneMeta.name} — {zoneMeta.subtitle}
+            {currentInterior === "tavern"
+              ? "🍺 Inside The Tavern — Walk up to the Dossier Desk"
+              : currentInterior === "wizard"
+              ? "🧙 Inside Wizard's Tower — Inspect the Arcane Tome"
+              : `${zoneMeta.emoji} ${zoneMeta.name} — ${zoneMeta.subtitle}`}
           </span>
+
+          {currentInterior && onExitInterior && (
+            <button
+              type="button"
+              id="exit-interior-btn"
+              onClick={onExitInterior}
+              style={{
+                fontFamily: "'Press Start 2P', cursive",
+                fontSize: "7.5px",
+                color: "hsl(255, 20%, 8%)",
+                background: "hsl(38, 85%, 55%)",
+                border: "1px solid hsl(38, 90%, 65%)",
+                padding: "4px 8px",
+                cursor: "pointer",
+                pointerEvents: "auto",
+              }}
+            >
+              🚪 Leave Room
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Discovery Toast Banner (Secrets / Level Up) */}
+      {discoveryToast && (
+        <div
+          id="discovery-toast"
+          role="status"
+          style={{
+            position: "fixed",
+            top: 108,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 28,
+            background: "hsla(255, 22%, 8%, 0.94)",
+            border: "1px solid hsl(38, 85%, 55%)",
+            padding: "6px 14px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11.5,
+            color: "hsl(38, 85%, 68%)",
+            pointerEvents: "none",
+            whiteSpace: "nowrap",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+          }}
+        >
+          {discoveryToast}
+        </div>
+      )}
+
+      {/* Level / XP / Secrets + Time & Night Pin Strip (top-left on desktop, bottom-center on mobile) */}
+      <div className="status-hud" style={{ pointerEvents: "auto" }}>
+        <div
+          style={{
+            background: "hsla(255, 22%, 8%, 0.88)",
+            border: "1px solid hsla(250, 15%, 28%, 0.8)",
+            padding: "6px 9px",
+            borderRadius: 2,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            <span id="hud-level" style={{ color: "hsl(38, 85%, 62%)", fontWeight: 700 }}>
+              ⭐ LV {level}
+            </span>
+            <span className="hide-mobile" style={{ color: "hsl(250, 12%, 68%)" }}>
+              {xp} XP
+            </span>
+            <span id="hud-secrets" style={{ color: "hsl(180, 65%, 66%)" }}>
+              🔮 {secretsFoundCount}/{totalSecretsCount}
+            </span>
+          </div>
+          <div
+            aria-hidden="true"
+            style={{
+              width: "100%",
+              height: 3,
+              background: "hsl(252, 16%, 16%)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${progressPct}%`,
+                height: "100%",
+                background: "hsl(38, 85%, 55%)",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+          {onToggleNightPin && (
+            <button
+              type="button"
+              id="night-pin-toggle"
+              onClick={onToggleNightPin}
+              title={nightPinned ? "Time pinned to midnight (click to allow cycle)" : "Day/night cycling active (click to pin night)"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 6,
+                background: nightPinned
+                  ? "hsla(250, 22%, 15%, 0.8)"
+                  : "hsla(38, 60%, 20%, 0.45)",
+                border: "1px solid hsla(250, 15%, 30%, 0.75)",
+                padding: "3px 6px",
+                cursor: "pointer",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10.5,
+                color: "hsl(40, 22%, 86%)",
+                borderRadius: 2,
+              }}
+            >
+              <span>
+                {timeInfo.raining ? "🌧️" : timeInfo.emoji} {timeInfo.label}
+              </span>
+              <span style={{ color: nightPinned ? "hsl(150, 55%, 62%)" : "hsl(38, 85%, 62%)" }}>
+                {nightPinned ? "📌 Night" : "↻ Cycle"}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -407,8 +575,8 @@ const TownOverlay = ({
         )}
       </div>
 
-      {/* Interaction prompt (matches TownWorld priority: villager within 2.6u, otherwise building) */}
-      {(nearVillager || nearBuilding) && (
+      {/* Interaction prompt (matches TownWorld priority: interior -> secret -> villager -> building) */}
+      {hasInteractTarget && (
         <div
           id="interaction-prompt"
           style={{
@@ -424,7 +592,11 @@ const TownOverlay = ({
           <div
             style={{
               background: "hsla(255, 20%, 7%, 0.92)",
-              border: nearVillager
+              border: nearInteriorAction
+                ? "2px solid hsl(275, 70%, 65%)"
+                : nearSecret
+                ? "2px solid hsl(185, 75%, 58%)"
+                : nearVillager
                 ? "2px solid hsl(150, 55%, 50%)"
                 : "2px solid hsl(38, 85%, 55%)",
               padding: "12px 24px",
@@ -440,11 +612,15 @@ const TownOverlay = ({
                 marginBottom: 4,
               }}
             >
-              {nearVillager
+              {nearInteriorAction
+                ? `${nearInteriorAction.emoji} ${nearInteriorAction.label}`
+                : nearSecret
+                ? `${nearSecret.emoji} Secret Find: ${nearSecret.name}`
+                : nearVillager
                 ? `${nearVillager.emoji} ${nearVillager.name} — ${nearVillager.role}`
                 : `${nearBuilding?.emoji} ${nearBuilding?.name}`}
             </p>
-            {nearVillager?.isGreeter && !greetedByRowan && (
+            {!nearInteriorAction && !nearSecret && nearVillager?.isGreeter && !greetedByRowan && (
               <p
                 style={{
                   fontFamily: "'Space Grotesk', sans-serif",
@@ -460,17 +636,41 @@ const TownOverlay = ({
               style={{
                 fontFamily: "'Press Start 2P', cursive",
                 fontSize: "clamp(6px, 1.5vw, 8px)",
-                color: nearVillager ? "hsl(150, 60%, 60%)" : "hsl(38, 85%, 55%)",
+                color: nearInteriorAction
+                  ? "hsl(275, 75%, 72%)"
+                  : nearSecret
+                  ? "hsl(185, 75%, 64%)"
+                  : nearVillager
+                  ? "hsl(150, 60%, 60%)"
+                  : "hsl(38, 85%, 55%)",
                 letterSpacing: "0.1em",
               }}
             >
               <span className="hide-mobile">
-                {nearVillager
+                {nearInteriorAction
+                  ? nearInteriorAction.actionType === "exit"
+                    ? "PRESS [E] OR [SPACE] TO LEAVE ROOM"
+                    : "PRESS [E] OR [SPACE] TO INSPECT"
+                  : nearSecret
+                  ? "PRESS [E] OR [SPACE] TO COLLECT (+75 XP)"
+                  : nearVillager
                   ? "PRESS [E] OR [SPACE] TO TALK"
+                  : nearBuilding && (nearBuilding.id === "tavern" || nearBuilding.id === "wizard")
+                  ? "PRESS [E] OR [SPACE] TO STEP INSIDE"
                   : "PRESS [E] OR [SPACE] TO ENTER"}
               </span>
               <span className="show-mobile">
-                {nearVillager ? "TAP ⚔️ TO TALK" : "TAP ⚔️ TO ENTER"}
+                {nearInteriorAction
+                  ? nearInteriorAction.actionType === "exit"
+                    ? "TAP ⚔️ TO LEAVE"
+                    : "TAP ⚔️ TO INSPECT"
+                  : nearSecret
+                  ? "TAP ⚔️ TO COLLECT"
+                  : nearVillager
+                  ? "TAP ⚔️ TO TALK"
+                  : nearBuilding && (nearBuilding.id === "tavern" || nearBuilding.id === "wizard")
+                  ? "TAP ⚔️ TO STEP INSIDE"
+                  : "TAP ⚔️ TO ENTER"}
               </span>
             </p>
           </div>
@@ -680,7 +880,15 @@ const TownOverlay = ({
       >
         <button
           type="button"
-          aria-label={nearVillager ? "Talk to nearby villager" : "Interact with nearby building"}
+          aria-label={
+            nearInteriorAction
+              ? nearInteriorAction.label
+              : nearSecret
+              ? `Collect ${nearSecret.name}`
+              : nearVillager
+              ? "Talk to nearby villager"
+              : "Interact with nearby building"
+          }
           onPointerDown={(e) => {
             e.preventDefault();
             triggerMobileInteract();
@@ -697,12 +905,16 @@ const TownOverlay = ({
               ? "hsla(38, 85%, 55%, 0.3)"
               : "hsla(255, 20%, 10%, 0.6)",
             border: hasInteractTarget
-              ? nearVillager
+              ? nearSecret
+                ? "3px solid hsl(185, 75%, 58%)"
+                : nearVillager
                 ? "3px solid hsl(150, 55%, 50%)"
                 : "3px solid hsl(38, 85%, 55%)"
               : "2px solid hsla(250, 15%, 25%, 0.5)",
             color: hasInteractTarget
-              ? nearVillager
+              ? nearSecret
+                ? "hsl(185, 75%, 64%)"
+                : nearVillager
                 ? "hsl(150, 60%, 60%)"
                 : "hsl(38, 85%, 55%)"
               : "hsl(250, 10%, 45%)",
@@ -744,6 +956,13 @@ const TownOverlay = ({
           top: 16px;
           right: 16px;
         }
+        .status-hud {
+          position: fixed;
+          top: 56px;
+          left: 16px;
+          z-index: 20;
+          min-width: 170px;
+        }
         .guide-item-btn:hover {
           border-color: hsl(38, 85%, 55%) !important;
           transform: translateX(-2px);
@@ -751,7 +970,9 @@ const TownOverlay = ({
         .guide-item-btn:focus-visible,
         #quest-log-toggle:focus-visible,
         #quick-view-toggle:focus-visible,
-        #unvisited-compass:focus-visible {
+        #unvisited-compass:focus-visible,
+        #night-pin-toggle:focus-visible,
+        #exit-interior-btn:focus-visible {
           outline: 2px solid hsl(38, 85%, 55%);
           outline-offset: 2px;
         }
@@ -778,6 +999,14 @@ const TownOverlay = ({
             transform: translateX(-50%);
             z-index: 19;
             white-space: nowrap;
+          }
+          .status-hud {
+            top: auto;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 140px;
+            max-width: 156px;
           }
         }
       `}</style>
