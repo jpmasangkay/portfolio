@@ -377,57 +377,63 @@ const TownWorld = ({
     addDirtPatch(3, -10, 1);   // wizard area
     addDirtPatch(9, 9, 0.8);   // notice board
 
-    // ====== PATHS (individually placed cobblestones) ======
-    const cobbleMats = [
-      new THREE.MeshLambertMaterial({ color: 0x8a7a68 }),
-      new THREE.MeshLambertMaterial({ color: 0x7a6a58 }),
-      new THREE.MeshLambertMaterial({ color: 0x9a8a78 }),
-      new THREE.MeshLambertMaterial({ color: 0x6a5a48 }),
+    // ====== PATHS (instanced cobblestones & border stones for fast draw calls) ======
+    const cobblePalette = [
+      new THREE.Color(0x8a7a68),
+      new THREE.Color(0x7a6a58),
+      new THREE.Color(0x9a8a78),
+      new THREE.Color(0x6a5a48),
     ];
+    const pathBaseMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
+    const cobblePlacements: { matrix: THREE.Matrix4; color: THREE.Color }[] = [];
+    const borderPlacements: THREE.Matrix4[] = [];
+    const dummy = new THREE.Object3D();
+
     const addCobblePath = (x: number, z: number, w: number, d: number) => {
       // Base path surface
       const base = new THREE.Mesh(
         new THREE.BoxGeometry(w, 0.08, d),
-        new THREE.MeshLambertMaterial({ color: 0x6a5a48 })
+        pathBaseMat
       );
       base.position.set(x, 0.04, z);
       base.receiveShadow = true;
       scene.add(base);
-      // Individual cobblestones
+      // Individual cobblestones collected for instancing
       const stoneSize = 0.35;
       const cols = Math.floor(w / stoneSize);
       const rows = Math.floor(d / stoneSize);
       for (let col = 0; col < cols; col++) {
         for (let row = 0; row < rows; row++) {
-          // Skip some for natural look
           const sx = x - w / 2 + col * stoneSize + stoneSize / 2 + (Math.random() - 0.5) * 0.05;
           const sz = z - d / 2 + row * stoneSize + stoneSize / 2 + (Math.random() - 0.5) * 0.05;
           const sSize = stoneSize * (0.7 + Math.random() * 0.25);
-          const stone = new THREE.Mesh(
-            new THREE.BoxGeometry(sSize, 0.04 + Math.random() * 0.02, sSize),
-            cobbleMats[Math.floor(Math.random() * cobbleMats.length)]
-          );
-          stone.position.set(sx, 0.08 + Math.random() * 0.01, sz);
-          stone.rotation.y = Math.random() * 0.5;
-          scene.add(stone);
+          dummy.position.set(sx, 0.08 + Math.random() * 0.01, sz);
+          dummy.rotation.set(0, Math.random() * 0.5, 0);
+          dummy.scale.set(sSize, 0.04 + Math.random() * 0.02, sSize);
+          dummy.updateMatrix();
+          cobblePlacements.push({
+            matrix: dummy.matrix.clone(),
+            color: cobblePalette[Math.floor(Math.random() * cobblePalette.length)],
+          });
         }
       }
       // Path border stones
-      const borderMat = new THREE.MeshLambertMaterial({ color: 0x5a5045 });
       for (let side = -1; side <= 1; side += 2) {
         if (w > d) {
-          // Horizontal path - borders on top/bottom
           for (let bx = 0; bx < Math.floor(w / 0.6); bx++) {
-            const border = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.15), borderMat);
-            border.position.set(x - w / 2 + bx * 0.6 + 0.3, 0.08, z + side * (d / 2 + 0.05));
-            scene.add(border);
+            dummy.position.set(x - w / 2 + bx * 0.6 + 0.3, 0.08, z + side * (d / 2 + 0.05));
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(0.5, 0.06, 0.15);
+            dummy.updateMatrix();
+            borderPlacements.push(dummy.matrix.clone());
           }
         } else {
-          // Vertical path - borders on left/right
           for (let bz = 0; bz < Math.floor(d / 0.6); bz++) {
-            const border = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.06, 0.5), borderMat);
-            border.position.set(x + side * (w / 2 + 0.05), 0.08, z - d / 2 + bz * 0.6 + 0.3);
-            scene.add(border);
+            dummy.position.set(x + side * (w / 2 + 0.05), 0.08, z - d / 2 + bz * 0.6 + 0.3);
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(0.15, 0.06, 0.5);
+            dummy.updateMatrix();
+            borderPlacements.push(dummy.matrix.clone());
           }
         }
       }
@@ -450,6 +456,44 @@ const TownWorld = ({
     addCobblePath(-4.75, 8, 6.5, 3);
     // Branch to noticeboard
     addCobblePath(4.75, 8, 6.5, 3);
+
+    // Extra loose road cobbles
+    for (let i = 0; i < 30; i++) {
+      const cx = (Math.random() - 0.5) * 2.5;
+      const cz = -12 + Math.random() * 24;
+      dummy.position.set(cx, 0.08, cz);
+      dummy.rotation.set(0, Math.random() * Math.PI, 0);
+      dummy.scale.set(0.3 + Math.random() * 0.2, 0.05, 0.3 + Math.random() * 0.2);
+      dummy.updateMatrix();
+      cobblePlacements.push({ matrix: dummy.matrix.clone(), color: cobblePalette[3] });
+    }
+    for (let i = 0; i < 20; i++) {
+      const cx = -10 + Math.random() * 20;
+      const cz = (Math.random() - 0.5) * 2.5;
+      dummy.position.set(cx, 0.08, cz);
+      dummy.rotation.set(0, Math.random() * Math.PI, 0);
+      dummy.scale.set(0.3 + Math.random() * 0.2, 0.05, 0.3 + Math.random() * 0.2);
+      dummy.updateMatrix();
+      cobblePlacements.push({ matrix: dummy.matrix.clone(), color: cobblePalette[3] });
+    }
+
+    const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const cobbleInstMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const cobbleInstMesh = new THREE.InstancedMesh(unitBoxGeo, cobbleInstMat, cobblePlacements.length);
+    cobbleInstMesh.receiveShadow = true;
+    cobblePlacements.forEach((p, idx) => {
+      cobbleInstMesh.setMatrixAt(idx, p.matrix);
+      cobbleInstMesh.setColorAt(idx, p.color);
+    });
+    cobbleInstMesh.instanceMatrix.needsUpdate = true;
+    if (cobbleInstMesh.instanceColor) cobbleInstMesh.instanceColor.needsUpdate = true;
+    scene.add(cobbleInstMesh);
+
+    const borderInstMat = new THREE.MeshLambertMaterial({ color: 0x5a5045 });
+    const borderInstMesh = new THREE.InstancedMesh(unitBoxGeo, borderInstMat, borderPlacements.length);
+    borderPlacements.forEach((m, idx) => borderInstMesh.setMatrixAt(idx, m));
+    borderInstMesh.instanceMatrix.needsUpdate = true;
+    scene.add(borderInstMesh);
 
     // ====== POND (detailed) ======
     // Pond bed (darker earth)
@@ -517,32 +561,54 @@ const TownWorld = ({
       scene.add(bulb);
     }
 
-    // ====== WILDFLOWER CLUSTERS ======
+    // ====== WILDFLOWER CLUSTERS (instanced stems & blossoms) ======
     const flowerColors = [0xff5577, 0xffaa44, 0xff66aa, 0xaa66ff, 0xffff66, 0x66aaff, 0xff8844];
+    const flowerStemMatrices: THREE.Matrix4[] = [];
+    const flowerHeadData: { matrix: THREE.Matrix4; color: THREE.Color }[] = [];
     for (let fc = 0; fc < 20; fc++) {
       const fx = (Math.random() - 0.5) * 38;
       const fz = (Math.random() - 0.5) * 38;
       if (Math.abs(fx) < 3 && fz > -14 && fz < 18) continue;
       if (Math.abs(fz) < 3 && fx > -14 && fx < 14) continue;
-      const clusterColor = flowerColors[Math.floor(Math.random() * flowerColors.length)];
+      const clusterColor = new THREE.Color(flowerColors[Math.floor(Math.random() * flowerColors.length)]);
       for (let fi = 0; fi < 3 + Math.floor(Math.random() * 4); fi++) {
         const ffx = fx + (Math.random() - 0.5) * 0.8;
         const ffz = fz + (Math.random() - 0.5) * 0.8;
-        // Stem
-        const fstem = new THREE.Mesh(
-          new THREE.BoxGeometry(0.03, 0.15 + Math.random() * 0.1, 0.03),
-          new THREE.MeshLambertMaterial({ color: 0x4a7a38 })
-        );
-        fstem.position.set(ffx, 0.1, ffz);
-        scene.add(fstem);
-        // Flower head
-        const fhead = new THREE.Mesh(
-          new THREE.BoxGeometry(0.07, 0.07, 0.07),
-          new THREE.MeshLambertMaterial({ color: clusterColor })
-        );
-        fhead.position.set(ffx, 0.2 + Math.random() * 0.05, ffz);
-        scene.add(fhead);
+        const stemH = 0.15 + Math.random() * 0.1;
+        dummy.position.set(ffx, 0.1, ffz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(0.03, stemH, 0.03);
+        dummy.updateMatrix();
+        flowerStemMatrices.push(dummy.matrix.clone());
+
+        dummy.position.set(ffx, 0.2 + Math.random() * 0.05, ffz);
+        dummy.scale.set(0.07, 0.07, 0.07);
+        dummy.updateMatrix();
+        flowerHeadData.push({ matrix: dummy.matrix.clone(), color: clusterColor });
       }
+    }
+    if (flowerStemMatrices.length > 0) {
+      const stemInst = new THREE.InstancedMesh(
+        unitBoxGeo,
+        new THREE.MeshLambertMaterial({ color: 0x4a7a38 }),
+        flowerStemMatrices.length
+      );
+      flowerStemMatrices.forEach((m, idx) => stemInst.setMatrixAt(idx, m));
+      stemInst.instanceMatrix.needsUpdate = true;
+      scene.add(stemInst);
+
+      const headInst = new THREE.InstancedMesh(
+        unitBoxGeo,
+        new THREE.MeshLambertMaterial({ color: 0xffffff }),
+        flowerHeadData.length
+      );
+      flowerHeadData.forEach((f, idx) => {
+        headInst.setMatrixAt(idx, f.matrix);
+        headInst.setColorAt(idx, f.color);
+      });
+      headInst.instanceMatrix.needsUpdate = true;
+      if (headInst.instanceColor) headInst.instanceColor.needsUpdate = true;
+      scene.add(headInst);
     }
 
     // ====== GARDEN PLOTS (vegetable rows near tavern) ======
@@ -1425,49 +1491,52 @@ const TownWorld = ({
       scene.add(sup);
     }
 
-    // Fence posts along edges (skipping open road gates)
+    // Fence posts along edges (instanced, skipping open road gates)
+    const fencePositions: [number, number][] = [];
     for (let i = -18; i <= 18; i += 3) {
       if (Math.abs(i) >= 3) {
-        [[-20, i], [20, i]].forEach(([fx, fz]) => {
-          const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
-          post.position.set(fx as number, 0.75, fz as number);
-          scene.add(post);
-        });
-        [[i, -18], [i, 20]].forEach(([fx, fz]) => {
-          const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 0.2), fenceMat);
-          post.position.set(fx as number, 0.75, fz as number);
-          scene.add(post);
-        });
+        fencePositions.push([-20, i], [20, i], [i, -18], [i, 20]);
       }
     }
+    const fenceInstMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.2, 1.5, 0.2),
+      fenceMat,
+      fencePositions.length
+    );
+    fencePositions.forEach(([fx, fz], idx) => {
+      dummy.position.set(fx, 0.75, fz);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      fenceInstMesh.setMatrixAt(idx, dummy.matrix);
+    });
+    fenceInstMesh.instanceMatrix.needsUpdate = true;
+    scene.add(fenceInstMesh);
 
-    // ====== LANTERN POSTS along paths ======
+    // ====== LANTERN POSTS along paths (shared geometries/materials, bright emissive glass, single shared plaza light) ======
     const torchLights: { light: THREE.PointLight; baseIntensity: number }[] = [];
     const lanternPostMat = new THREE.MeshLambertMaterial({ color: 0x3a3020 });
+    const lanternBodyMat = new THREE.MeshLambertMaterial({ color: 0x2a2018 });
     const lanternGlassMat = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
+    const lanternPostGeo = new THREE.BoxGeometry(0.15, 2.5, 0.15);
+    const lanternBodyGeo = new THREE.BoxGeometry(0.3, 0.35, 0.3);
+    const lanternGlassGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const lanternRoofGeo = new THREE.ConeGeometry(0.22, 0.2, 4);
 
     const addLanternPost = (x: number, z: number) => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.5, 0.15), lanternPostMat);
+      const post = new THREE.Mesh(lanternPostGeo, lanternPostMat);
       post.position.set(x, 1.25, z);
-      post.castShadow = true;
       scene.add(post);
-      // Lantern top
-      const lanternBody = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.3), new THREE.MeshLambertMaterial({ color: 0x2a2018 }));
+      const lanternBody = new THREE.Mesh(lanternBodyGeo, lanternBodyMat);
       lanternBody.position.set(x, 2.65, z);
       scene.add(lanternBody);
-      const lanternGlass = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), lanternGlassMat);
+      const lanternGlass = new THREE.Mesh(lanternGlassGeo, lanternGlassMat);
       lanternGlass.position.set(x, 2.65, z);
       scene.add(lanternGlass);
-      // Lantern roof
-      const lanternRoof = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.2, 4), lanternPostMat);
+      const lanternRoof = new THREE.Mesh(lanternRoofGeo, lanternPostMat);
       lanternRoof.position.set(x, 2.95, z);
       lanternRoof.rotation.y = Math.PI / 4;
       scene.add(lanternRoof);
-      // Add a point light
-      const lanternLight = new THREE.PointLight(0xffaa33, 1.5, 8, 1.5);
-      lanternLight.position.set(x, 2.65, z);
-      scene.add(lanternLight);
-      torchLights.push({ light: lanternLight, baseIntensity: 1.5 });
     };
 
     // Lanterns along main road
@@ -1515,16 +1584,26 @@ const TownWorld = ({
     }
     addWallSegment(-18, -2.8, 1.1, 1.4, 2.5);
     addWallSegment(-18, 2.8, 1.1, 1.4, 2.5);
-    // Wall merlon / battlement details
+    // Wall merlon / battlement details (instanced)
+    const merlonPositions: [number, number][] = [];
     for (let i = -16; i <= 16; i += 2) {
       if (Math.abs(i) < 3) continue;
-      const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.9), wallMat2);
-      merlon.position.set(i, 1.75, -16);
-      scene.add(merlon);
-      const merlon2 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.9), wallMat2);
-      merlon2.position.set(i, 1.75, 18);
-      scene.add(merlon2);
+      merlonPositions.push([i, -16], [i, 18]);
     }
+    const merlonInst = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.6, 0.5, 0.9),
+      wallMat2,
+      merlonPositions.length
+    );
+    merlonPositions.forEach(([mx, mz], idx) => {
+      dummy.position.set(mx, 1.75, mz);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      merlonInst.setMatrixAt(idx, dummy.matrix);
+    });
+    merlonInst.instanceMatrix.needsUpdate = true;
+    scene.add(merlonInst);
 
     // ====== MARKET STALL (near town square) ======
     const stallWoodMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
@@ -1665,43 +1744,22 @@ const TownWorld = ({
     addMushroom(-5.5, -9.5, 0.8);
     addMushroom(14.5, 5.5, 0.6);
 
-    // ====== COBBLESTONE DETAILS on paths ======
-    const cobbleMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
-    for (let i = 0; i < 30; i++) {
-      const cx = (Math.random() - 0.5) * 2.5;
-      const cz = -12 + Math.random() * 24;
-      const cobble = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3 + Math.random() * 0.2, 0.05, 0.3 + Math.random() * 0.2),
-        cobbleMat
-      );
-      cobble.position.set(cx, 0.08, cz);
-      cobble.rotation.y = Math.random() * Math.PI;
-      scene.add(cobble);
-    }
-    // East-west road cobbles
-    for (let i = 0; i < 20; i++) {
-      const cx = -10 + Math.random() * 20;
-      const cz = (Math.random() - 0.5) * 2.5;
-      const cobble = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3 + Math.random() * 0.2, 0.05, 0.3 + Math.random() * 0.2),
-        cobbleMat
-      );
-      cobble.position.set(cx, 0.08, cz);
-      cobble.rotation.y = Math.random() * Math.PI;
-      scene.add(cobble);
-    }
-
-    // ====== WATER REEDS near pond ======
+    // ====== WATER REEDS near pond (instanced, shared material) ======
     const waterReedMat = new THREE.MeshLambertMaterial({ color: 0x3a6a3a });
+    const waterReedInst = new THREE.InstancedMesh(unitBoxGeo, waterReedMat, 8);
     for (let i = 0; i < 8; i++) {
       const angle = (i / 8) * Math.PI * 2;
       const rx = 5 + Math.cos(angle) * 2.3;
       const rz = -5 + Math.sin(angle) * 2.3;
-      const reed = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6 + Math.random() * 0.4, 0.04), waterReedMat);
-      reed.position.set(rx, 0.4, rz);
-      reed.rotation.z = (Math.random() - 0.5) * 0.2;
-      scene.add(reed);
+      const h = 0.6 + Math.random() * 0.4;
+      dummy.position.set(rx, 0.4, rz);
+      dummy.rotation.set(0, 0, (Math.random() - 0.5) * 0.2);
+      dummy.scale.set(0.04, h, 0.04);
+      dummy.updateMatrix();
+      waterReedInst.setMatrixAt(i, dummy.matrix);
     }
+    waterReedInst.instanceMatrix.needsUpdate = true;
+    scene.add(waterReedInst);
 
     // ====== BUILDING-SPECIFIC PROPS ======
 
@@ -2269,29 +2327,21 @@ const TownWorld = ({
       scene.add(neck);
     }
 
-    // ====== HANGING WALL LANTERNS ======
+    // ====== HANGING WALL LANTERNS (shared geometries/materials, bright emissive glass) ======
     const wallLanternMat = new THREE.MeshLambertMaterial({ color: 0x2a2018 });
+    const wallBracketGeo = new THREE.BoxGeometry(0.4, 0.06, 0.06);
+    const wallLanternGeo = new THREE.BoxGeometry(0.2, 0.25, 0.2);
+    const wallGlowGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     const addWallLantern = (x: number, y: number, z: number) => {
-      // Bracket
-      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.06), wallLanternMat);
+      const bracket = new THREE.Mesh(wallBracketGeo, wallLanternMat);
       bracket.position.set(x, y, z);
       scene.add(bracket);
-      // Lantern body
-      const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.2), wallLanternMat);
+      const lantern = new THREE.Mesh(wallLanternGeo, wallLanternMat);
       lantern.position.set(x + 0.2, y - 0.15, z);
       scene.add(lantern);
-      // Glow
-      const glowCube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.12, 0.12, 0.12),
-        new THREE.MeshBasicMaterial({ color: 0xffcc44 })
-      );
+      const glowCube = new THREE.Mesh(wallGlowGeo, lanternGlassMat);
       glowCube.position.set(x + 0.2, y - 0.15, z);
       scene.add(glowCube);
-      // Light
-      const wLight = new THREE.PointLight(0xffaa33, 1, 5, 1.5);
-      wLight.position.set(x + 0.2, y - 0.1, z);
-      scene.add(wLight);
-      torchLights.push({ light: wLight, baseIntensity: 1 });
     };
     // Tavern wall lanterns
     addWallLantern(-5.6, 2.5, 10.5);
@@ -2992,8 +3042,8 @@ const TownWorld = ({
     const moon = new THREE.DirectionalLight(0xcbe0ff, 1.75);
     moon.position.set(-12, 24, 10);
     moon.castShadow = true;
-    moon.shadow.mapSize.width = 2048;
-    moon.shadow.mapSize.height = 2048;
+    moon.shadow.mapSize.width = 1024;
+    moon.shadow.mapSize.height = 1024;
     moon.shadow.camera.near = 0.5;
     moon.shadow.camera.far = 65;
     moon.shadow.camera.left = -28;
@@ -3007,16 +3057,11 @@ const TownWorld = ({
     fill.position.set(12, 12, 10);
     scene.add(fill);
 
-    // Torch lights (at buildings with windows)
-
-    BUILDINGS.forEach((b) => {
-      if (b.hasWindows || b.id === "questboard") {
-        const light = new THREE.PointLight(0xffaa44, 3, 16, 1.2);
-        light.position.set(b.x, b.h * 0.7, b.z + b.d / 2 + 1);
-        scene.add(light);
-        torchLights.push({ light, baseIntensity: 3 });
-      }
-    });
+    // Central warm plaza point light (replaces per-building & per-lantern lights for Batch H FPS budget)
+    const plazaWarmLight = new THREE.PointLight(0xffaa44, 1.55, 34, 1.0);
+    plazaWarmLight.position.set(0, 6, 2);
+    scene.add(plazaWarmLight);
+    torchLights.push({ light: plazaWarmLight, baseIntensity: 1.55 });
 
     // Forge fire glow
     const forgeFire = new THREE.PointLight(0xff6622, 4, 12, 1.2);
@@ -3717,7 +3762,7 @@ const TownWorld = ({
 
     animFrameRef.current = requestAnimationFrame(animate);
 
-    // ====== CLEANUP ======
+    // ====== CLEANUP (dispose geometries, materials, render target & listeners) ======
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       window.removeEventListener("keydown", onKeyDown);
@@ -3725,10 +3770,40 @@ const TownWorld = ({
       window.removeEventListener("blur", clearHeldInputs);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("resize", onResize);
+
+      const disposedGeos = new Set<THREE.BufferGeometry>();
+      const disposedMats = new Set<THREE.Material>();
+      const disposeMat = (m: THREE.Material) => {
+        if (disposedMats.has(m)) return;
+        disposedMats.add(m);
+        for (const val of Object.values(m)) {
+          if (val && typeof val === "object" && "isTexture" in val && val.isTexture) {
+            (val as THREE.Texture).dispose();
+          }
+        }
+        m.dispose();
+      };
+
+      scene.traverse((obj) => {
+        if ("geometry" in obj && obj.geometry && typeof (obj.geometry as THREE.BufferGeometry).dispose === "function") {
+          const geo = obj.geometry as THREE.BufferGeometry;
+          if (!disposedGeos.has(geo)) {
+            disposedGeos.add(geo);
+            geo.dispose();
+          }
+        }
+        if ("material" in obj && obj.material) {
+          const mat = obj.material;
+          if (Array.isArray(mat)) mat.forEach(disposeMat);
+          else disposeMat(mat as THREE.Material);
+        }
+      });
+      screenQuad.geometry.dispose();
+      screenMat.dispose();
+      renderTarget.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      renderTarget.dispose();
       renderer.dispose();
     };
   }, [handleInteract, onNearBuilding]);

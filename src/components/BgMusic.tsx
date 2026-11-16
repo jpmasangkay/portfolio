@@ -14,7 +14,7 @@ const BgMusic = () => {
     audio.src = "/bgm.webm";
     audio.loop = true;
     audio.volume = BGM_VOLUME;
-    audio.preload = "auto";
+    audio.preload = "none";
     audioRef.current = audio;
 
     // Auto-start music on any user interaction unless explicitly muted previously

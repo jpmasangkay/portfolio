@@ -1,20 +1,36 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { Suspense, lazy, useState, useCallback, useEffect, useRef, useMemo } from "react";
 import BgMusic from "@/components/BgMusic";
 import TownWorld, { type InteriorActionPrompt } from "@/components/TownWorld";
 import TownOverlay from "@/components/TownOverlay";
 import ScrollModal from "@/components/ScrollModal";
-import QuickViewPortfolio from "@/components/QuickViewPortfolio";
 import VillagerDialogueBox from "@/components/VillagerDialogueBox";
-import TavernModal from "@/components/modals/TavernModal";
-import QuestBoardModal from "@/components/modals/QuestBoardModal";
-import WizardTowerModal from "@/components/modals/WizardTowerModal";
-import GalleryModal from "@/components/modals/GalleryModal";
-import ForgeModal from "@/components/modals/ForgeModal";
-import NoticeBoardModal from "@/components/modals/NoticeBoardModal";
-import GateModal from "@/components/modals/GateModal";
-import ExitModal from "@/components/modals/ExitModal";
-import QuestLogModal from "@/components/modals/QuestLogModal";
 import type { BuildingId } from "@/data/portfolio-data";
+
+const QuickViewPortfolio = lazy(() => import("@/components/QuickViewPortfolio"));
+const TavernModal = lazy(() => import("@/components/modals/TavernModal"));
+const QuestBoardModal = lazy(() => import("@/components/modals/QuestBoardModal"));
+const WizardTowerModal = lazy(() => import("@/components/modals/WizardTowerModal"));
+const GalleryModal = lazy(() => import("@/components/modals/GalleryModal"));
+const ForgeModal = lazy(() => import("@/components/modals/ForgeModal"));
+const NoticeBoardModal = lazy(() => import("@/components/modals/NoticeBoardModal"));
+const GateModal = lazy(() => import("@/components/modals/GateModal"));
+const ExitModal = lazy(() => import("@/components/modals/ExitModal"));
+const QuestLogModal = lazy(() => import("@/components/modals/QuestLogModal"));
+
+const ModalLoadingFallback = () => (
+  <div
+    role="status"
+    style={{
+      padding: "28px 16px",
+      textAlign: "center",
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: 13,
+      color: "hsl(38, 85%, 60%)",
+    }}
+  >
+    Loading archive scroll...
+  </div>
+);
 import type { VillagerDef } from "@/data/villagers";
 import { TOWN_BUILDINGS_LAYOUT } from "@/lib/town-buildings";
 import type { ZoneId } from "@/lib/town-zones";
@@ -72,7 +88,10 @@ function loadBooleanFlag(key: string): boolean {
   }
 }
 
-const modalConfig: Record<Exclude<BuildingId, "wizard">, { title: string; emoji: string; component: React.FC }> = {
+const modalConfig: Record<
+  Exclude<BuildingId, "wizard">,
+  { title: string; emoji: string; component: React.LazyExoticComponent<React.FC> }
+> = {
   gate: { title: "Town Gate", emoji: "🏰", component: GateModal },
   tavern: { title: "The Tavern", emoji: "🍺", component: TavernModal },
   questboard: { title: "Quest Board", emoji: "📜", component: QuestBoardModal },
@@ -367,8 +386,31 @@ const Index = () => {
         />
       )}
 
-      {/* Recruiter Quick View */}
-      {quickView && <QuickViewPortfolio onBackToWorld={() => setQuickView(false)} />}
+      {/* Recruiter Quick View (lazy loaded) */}
+      {quickView && (
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#0d0b16",
+                color: "hsl(38, 85%, 60%)",
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              Loading recruiter portfolio...
+            </div>
+          }
+        >
+          <QuickViewPortfolio onBackToWorld={() => setQuickView(false)} />
+        </Suspense>
+      )}
 
       {/* Quest Log Modal */}
       {questLogOpen && !quickView && (
@@ -378,22 +420,24 @@ const Index = () => {
           title="Adventurer's Quest Log"
           emoji="📒"
         >
-          <QuestLogModal
-            visitedBuildings={visitedBuildings}
-            visitedZones={visitedZones}
-            foundSecrets={foundSecrets}
-            level={progression.level}
-            xp={progression.xp}
-            title={progression.title}
-            greetedByRowan={greetedByRowan}
-            cloakEquipped={cloakEquipped}
-            onToggleCloak={() => setCloakEquipped((c) => !c)}
-            onJumpToBuilding={handleInteract}
-            onOpenQuickView={() => {
-              setQuestLogOpen(false);
-              setQuickView(true);
-            }}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <QuestLogModal
+              visitedBuildings={visitedBuildings}
+              visitedZones={visitedZones}
+              foundSecrets={foundSecrets}
+              level={progression.level}
+              xp={progression.xp}
+              title={progression.title}
+              greetedByRowan={greetedByRowan}
+              cloakEquipped={cloakEquipped}
+              onToggleCloak={() => setCloakEquipped((c) => !c)}
+              onJumpToBuilding={handleInteract}
+              onOpenQuickView={() => {
+                setQuestLogOpen(false);
+                setQuickView(true);
+              }}
+            />
+          </Suspense>
         </ScrollModal>
       )}
 
@@ -405,14 +449,16 @@ const Index = () => {
           title="Wizard's Tower"
           emoji="🧙"
         >
-          <WizardTowerModal
-            level={progression.level}
-            xp={progression.xp}
-            title={progression.title}
-            nextLevelXp={progression.nextLevelXp}
-            visitedCount={visitedBuildings.size}
-            secretsFoundCount={foundSecrets.size}
-          />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <WizardTowerModal
+              level={progression.level}
+              xp={progression.xp}
+              title={progression.title}
+              nextLevelXp={progression.nextLevelXp}
+              visitedCount={visitedBuildings.size}
+              secretsFoundCount={foundSecrets.size}
+            />
+          </Suspense>
         </ScrollModal>
       )}
 
@@ -424,7 +470,9 @@ const Index = () => {
           title={currentStdModal.title}
           emoji={currentStdModal.emoji}
         >
-          <currentStdModal.component />
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <currentStdModal.component />
+          </Suspense>
         </ScrollModal>
       )}
     </div>

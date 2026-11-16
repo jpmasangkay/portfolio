@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 interface ScrollModalProps {
   open: boolean;
@@ -8,162 +8,208 @@ interface ScrollModalProps {
   children: ReactNode;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps) => {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open && !document.querySelector("dialog[open]")) {
+    if (!open) return;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+
+    if (dialog) {
+      if (typeof dialog.showModal === "function" && !dialog.open) {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+      const firstFocusable = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (firstFocusable ?? dialog).focus();
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Yield if a nested ImageLightbox dialog is open above this modal
+        if (document.querySelector("dialog[data-lightbox='true'][open]")) return;
+        e.preventDefault();
         onClose();
+        return;
+      }
+
+      // Defensive Tab focus trap for environments without native top-layer inerting
+      if (e.key === "Tab" && dialog) {
+        if (document.querySelector("dialog[data-lightbox='true'][open]")) return;
+        const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (dialog?.open && typeof dialog.close === "function") {
+        dialog.close();
+      }
+      if (prevFocus && typeof prevFocus.focus === "function" && prevFocus.isConnected) {
+        prevFocus.focus();
+      }
+    };
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    let pressedOutside = false;
+    const isOutside = (e: PointerEvent) => {
+      const r = dialog.getBoundingClientRect();
+      return (
+        e.clientX < r.left ||
+        e.clientX > r.right ||
+        e.clientY < r.top ||
+        e.clientY > r.bottom
+      );
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      pressedOutside = isOutside(e);
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (
+        pressedOutside &&
+        isOutside(e) &&
+        !document.querySelector("dialog[data-lightbox='true'][open]")
+      ) {
+        onClose();
+      }
+      pressedOutside = false;
+    };
+
+    dialog.addEventListener("pointerdown", onPointerDown);
+    dialog.addEventListener("pointerup", onPointerUp);
+    return () => {
+      dialog.removeEventListener("pointerdown", onPointerDown);
+      dialog.removeEventListener("pointerup", onPointerUp);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       className="scroll-modal-overlay"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      {...({ closedby: "any" } as Record<string, string>)}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!document.querySelector("dialog[data-lightbox='true'][open]")) {
+          onClose();
+        }
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
       }}
       style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100dvh",
-        zIndex: 50,
+        margin: "auto",
+        padding: 0,
+        width: "min(92vw, 680px)",
+        maxHeight: "min(86dvh, 720px)",
+        background: "linear-gradient(175deg, hsl(252, 22%, 12%) 0%, hsl(255, 22%, 8%) 100%)",
+        border: "1px solid hsla(38, 85%, 55%, 0.65)",
+        boxShadow:
+          "0 0 0 1px hsla(250, 20%, 22%, 0.9), 0 22px 60px rgba(0,0,0,0.8)",
+        color: "hsl(40, 25%, 88%)",
+        borderRadius: 2,
+        overflow: "hidden",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "hsla(255, 20%, 4%, 0.7)",
-        backdropFilter: "blur(4px)",
-        animation: "modalFadeIn 0.3s ease-out",
+        flexDirection: "column",
+        overscrollBehavior: "contain",
       }}
     >
+      {/* Header Bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "14px 18px",
+          borderBottom: "1px solid hsla(38, 85%, 55%, 0.35)",
+          background: "hsla(255, 24%, 7%, 0.9)",
+          flexShrink: 0,
+        }}
+      >
+        <h2
+          id={titleId}
+          style={{
+            fontFamily: "'Press Start 2P', cursive",
+            fontSize: "clamp(10px, 2.2vw, 13px)",
+            color: "hsl(38, 85%, 58%)",
+            lineHeight: 1.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span aria-hidden="true">{emoji}</span>
+          <span>{title}</span>
+        </h2>
+
+        <button
+          type="button"
+          aria-label={`Close ${title}`}
+          onClick={onClose}
+          style={{
+            fontFamily: "'Press Start 2P', cursive",
+            fontSize: "10px",
+            color: "hsl(40, 25%, 82%)",
+            background: "hsl(252, 18%, 16%)",
+            border: "1px solid hsl(250, 15%, 30%)",
+            width: 36,
+            height: 36,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            flexShrink: 0,
+            transition: "border-color 0.15s ease, color 0.15s ease",
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Scrollable Inner Content */}
       <div
         className="scroll-modal-content"
         style={{
-          width: "clamp(95%, 90vw, 700px)",
-          maxWidth: 700,
-          maxHeight: "80dvh",
+          padding: "18px 20px",
           overflowY: "auto",
-          background: "linear-gradient(180deg, hsl(35, 25%, 18%) 0%, hsl(30, 20%, 14%) 100%)",
-          border: "3px solid hsl(30, 30%, 28%)",
-          boxShadow: "5px 5px 0 rgba(0,0,0,0.5), 0 0 40px hsla(38, 85%, 55%, 0.15), inset 0 1px 0 hsla(40, 40%, 50%, 0.1)",
-          position: "relative",
-          animation: "modalSlideIn 0.35s ease-out",
+          flex: 1,
+          overscrollBehavior: "contain",
         }}
       >
-        {/* Parchment texture lines */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            opacity: 0.03,
-            backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 28px, hsla(40, 30%, 60%, 1) 28px, hsla(40, 30%, 60%, 1) 29px)",
-            pointerEvents: "none",
-          }}
-        />
-
-        {/* Top decoration */}
-        <div
-          style={{
-            height: 3,
-            background: "linear-gradient(90deg, transparent, hsl(38, 85%, 55%), transparent)",
-          }}
-        />
-
-        {/* Header */}
-        <div
-          style={{
-            padding: "clamp(12px, 3vw, 20px) clamp(14px, 4vw, 24px) clamp(8px, 2vw, 12px)",
-            borderBottom: "2px solid hsla(30, 25%, 25%, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: "clamp(18px, 4vw, 24px)" }}>{emoji}</span>
-            <h2
-              style={{
-                fontFamily: "'Press Start 2P', cursive",
-                fontSize: "clamp(9px, 2vw, 12px)",
-                color: "hsl(38, 85%, 55%)",
-                textShadow: "0 0 10px hsla(38, 85%, 55%, 0.3)",
-                lineHeight: 1.8,
-              }}
-            >
-              {title}
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              fontFamily: "'Press Start 2P', cursive",
-              fontSize: "clamp(10px, 2vw, 12px)",
-              color: "hsl(250, 10%, 50%)",
-              background: "hsl(250, 15%, 18%)",
-              border: "2px solid hsl(250, 15%, 25%)",
-              padding: "8px 12px",
-              minWidth: 44,
-              minHeight: 44,
-              cursor: "pointer",
-              boxShadow: "2px 2px 0 rgba(0,0,0,0.3)",
-              transition: "all 0.1s ease",
-            }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLButtonElement).style.color = "hsl(0, 65%, 55%)";
-              (e.target as HTMLButtonElement).style.borderColor = "hsl(0, 65%, 55%)";
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.color = "hsl(250, 10%, 50%)";
-              (e.target as HTMLButtonElement).style.borderColor = "hsl(250, 15%, 25%)";
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: "clamp(12px, 3vw, 20px) clamp(14px, 4vw, 24px) clamp(16px, 3vw, 24px)", position: "relative" }}>
-          {children}
-        </div>
-
-        {/* Bottom decoration */}
-        <div
-          style={{
-            height: 3,
-            background: "linear-gradient(90deg, transparent, hsl(38, 85%, 55%), transparent)",
-          }}
-        />
+        {children}
       </div>
-
-      <style>{`
-        @keyframes modalFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes modalSlideIn {
-          from { opacity: 0; transform: translateY(20px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .scroll-modal-content::-webkit-scrollbar {
-          width: 6px;
-        }
-        .scroll-modal-content::-webkit-scrollbar-track {
-          background: hsl(30, 20%, 12%);
-        }
-        .scroll-modal-content::-webkit-scrollbar-thumb {
-          background: hsl(30, 25%, 28%);
-        }
-      `}</style>
-    </div>
+    </dialog>
   );
 };
 

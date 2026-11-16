@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { VillagerDef } from "@/data/villagers";
 
 interface VillagerDialogueBoxProps {
@@ -14,7 +14,12 @@ const VillagerDialogueBox = ({
   onNext,
   onClose,
 }: VillagerDialogueBoxProps) => {
+  const speakerId = useId();
+  const nextBtnRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    nextBtnRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -27,7 +32,12 @@ const VillagerDialogueBox = ({
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (prevFocus && typeof prevFocus.focus === "function" && prevFocus.isConnected) {
+        prevFocus.focus();
+      }
+    };
   }, [onNext, onClose]);
 
   const currentLine = villager.lines[lineIndex % villager.lines.length];
@@ -36,7 +46,8 @@ const VillagerDialogueBox = ({
     <div
       id="villager-dialogue-box"
       role="dialog"
-      aria-label={`Conversation with ${villager.name}`}
+      aria-modal="true"
+      aria-labelledby={speakerId}
       style={{
         position: "fixed",
         left: "50%",
@@ -61,6 +72,7 @@ const VillagerDialogueBox = ({
         }}
       >
         <p
+          id={speakerId}
           style={{
             fontFamily: "'Press Start 2P', cursive",
             fontSize: "9px",
@@ -98,6 +110,7 @@ const VillagerDialogueBox = ({
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
+          ref={nextBtnRef}
           type="button"
           onClick={onNext}
           style={{
