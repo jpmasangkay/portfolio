@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local sensitive / temporary resume extraction artifacts
+_tmp_resume.txt
+scripts/extract-resume.ps1
+

@@ -1,0 +1,36 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import ScrollModal from "./ScrollModal";
+
+describe("ScrollModal", () => {
+  it("renders nothing when closed", () => {
+    const { container } = render(
+      <ScrollModal open={false} onClose={vi.fn()} title="The Tavern" emoji="🍺">
+        <p>Inner body</p>
+      </ScrollModal>
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders title, emoji, and children when open and closes on button, Escape, and backdrop", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <ScrollModal open={true} onClose={onClose} title="The Tavern" emoji="🍺">
+        <p>Adventurer bio</p>
+      </ScrollModal>
+    );
+
+    expect(screen.getByText("The Tavern")).toBeInTheDocument();
+    expect(screen.getByText("Adventurer bio")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(2);
+
+    const overlay = container.querySelector(".scroll-modal-overlay")!;
+    fireEvent.click(overlay);
+    expect(onClose).toHaveBeenCalledTimes(3);
+  });
+});
