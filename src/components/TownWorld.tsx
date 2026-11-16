@@ -113,10 +113,10 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
 
     // ====== SCENE ======
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1832);
-    scene.fog = new THREE.Fog(0x1a1832, 30, 55);
+    scene.background = new THREE.Color(0x161932);
+    scene.fog = new THREE.Fog(0x161932, 34, 68);
 
-    // ====== CAMERA (isometric) ======
+    // ====== CAMERA (isometric with opening sweep) ======
     const aspect = window.innerWidth / window.innerHeight;
     const camSize = 12;
     const camera = new THREE.OrthographicCamera(
@@ -124,20 +124,45 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
       camSize, -camSize,
       0.1, 100
     );
-    // Isometric angle centered on player
-    camera.position.set(playerPosRef.current.x + 15, 18, playerPosRef.current.z + 15);
-    camera.lookAt(playerPosRef.current.x, 0, playerPosRef.current.z);
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const SWEEP_DURATION = 1.9;
+    let sweepElapsed = prefersReducedMotion ? SWEEP_DURATION : 0;
+    let sweepDone = Boolean(prefersReducedMotion);
+    const sweepStartTarget = new THREE.Vector3(0, 0, -4);
+    const sweepStartOffset = new THREE.Vector3(18, 22, 15);
+    const followOffset = new THREE.Vector3(15, 18, 15);
+    const camLookTarget = new THREE.Vector3(
+      sweepDone ? playerPosRef.current.x : sweepStartTarget.x,
+      0,
+      sweepDone ? playerPosRef.current.z : sweepStartTarget.z
+    );
+    camera.position.set(
+      camLookTarget.x + (sweepDone ? followOffset.x : sweepStartOffset.x),
+      sweepDone ? followOffset.y : sweepStartOffset.y,
+      camLookTarget.z + (sweepDone ? followOffset.z : sweepStartOffset.z)
+    );
+    camera.lookAt(camLookTarget);
 
     // ====== MATERIALS ======
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3a4a30 });
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3b5033 });
     const pathMat = new THREE.MeshLambertMaterial({ color: 0x8a7a68 });
     const waterMat = new THREE.MeshLambertMaterial({ color: 0x3366cc, transparent: true, opacity: 0.7 });
 
-    // ====== GROUND (multi-layered) ======
-    // Base dark earth
+    // ====== GROUND (multi-layered + outer horizon meadow to eliminate void) ======
+    const outerMeadow = new THREE.Mesh(
+      new THREE.BoxGeometry(160, 0.4, 160),
+      new THREE.MeshLambertMaterial({ color: 0x22301e })
+    );
+    outerMeadow.position.y = -0.58;
+    outerMeadow.receiveShadow = true;
+    scene.add(outerMeadow);
+
+    // Base dark earth terrace
     const groundBase = new THREE.Mesh(
       new THREE.BoxGeometry(54, 0.3, 54),
-      new THREE.MeshLambertMaterial({ color: 0x2a3a20 })
+      new THREE.MeshLambertMaterial({ color: 0x2a3c23 })
     );
     groundBase.position.y = -0.35;
     groundBase.receiveShadow = true;
@@ -148,8 +173,8 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     ground.receiveShadow = true;
     scene.add(ground);
     // Lighter grass patches (varied terrain)
-    const lightGrassMat = new THREE.MeshLambertMaterial({ color: 0x4a5a38 });
-    const darkGrassMat = new THREE.MeshLambertMaterial({ color: 0x2e3e24 });
+    const lightGrassMat = new THREE.MeshLambertMaterial({ color: 0x4c653f });
+    const darkGrassMat = new THREE.MeshLambertMaterial({ color: 0x2f4126 });
     for (let i = 0; i < 25; i++) {
       const gx = (Math.random() - 0.5) * 40;
       const gz = (Math.random() - 0.5) * 40;
@@ -237,6 +262,16 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     };
     // Main north-south road
     addCobblePath(0, 3, 3, 30);
+    // Approaching road beyond south gate & north wall so roads fade into the surrounding realm
+    const outerRoadMat = new THREE.MeshLambertMaterial({ color: 0x625648 });
+    const southRoadExt = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 22), outerRoadMat);
+    southRoadExt.position.set(0, -0.36, 29);
+    southRoadExt.receiveShadow = true;
+    scene.add(southRoadExt);
+    const northRoadExt = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 20), outerRoadMat);
+    northRoadExt.position.set(0, -0.36, -26);
+    northRoadExt.receiveShadow = true;
+    scene.add(northRoadExt);
     // East-west crossroad
     addCobblePath(0, 0, 25, 3);
     // Branch to tavern
@@ -1131,6 +1166,39 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     addPine(-16, -6, 4);
     addBirch(16, -8, 2.5);
     addOak(-8, 14, 3);
+
+    // Outer perimeter forest silhouettes (frame town edge and eliminate void)
+    const outerTreeSpots: [number, number, "oak" | "pine", number][] = [
+      [-23, 24, "pine", 4.2], [-18, 26, "oak", 3.4], [-12, 24, "pine", 3.8], [-6, 25, "pine", 4.0],
+      [6, 25, "oak", 3.6], [13, 24, "pine", 4.2], [20, 22, "oak", 3.5], [24, 16, "pine", 4.4],
+      [-25, 16, "oak", 3.6], [-26, 8, "pine", 4.5], [-24, 0, "oak", 3.8], [-25, -9, "pine", 4.2],
+      [-24, -18, "oak", 3.5], [-16, -24, "pine", 4.4], [-8, -23, "oak", 3.4], [8, -24, "pine", 4.2],
+      [17, -23, "oak", 3.8], [24, -17, "pine", 4.0], [25, -8, "oak", 3.6], [24, 3, "pine", 4.2],
+      [-31, 20, "pine", 4.8], [-30, 5, "oak", 4.0], [-29, -12, "pine", 4.6], [30, -14, "pine", 4.5],
+      [29, 10, "oak", 3.8], [-15, 31, "pine", 4.5], [14, 30, "oak", 3.8],
+    ];
+    outerTreeSpots.forEach(([ox, oz, kind, oh]) => {
+      if (kind === "oak") {
+        const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.6, oh, 0.6), treeTrunkMat);
+        trunk.position.set(ox, oh / 2 - 0.38, oz);
+        scene.add(trunk);
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.8, 2.3), treeLeafMat);
+        canopy.position.set(ox, oh + 0.6 - 0.38, oz);
+        scene.add(canopy);
+      } else {
+        const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.35, oh, 0.35), treeTrunkMat);
+        trunk.position.set(ox, oh / 2 - 0.38, oz);
+        scene.add(trunk);
+        const tier1 = new THREE.Mesh(new THREE.ConeGeometry(1.3, 1.5, 4), treeLeafMat);
+        tier1.position.set(ox, oh * 0.55 - 0.38, oz);
+        tier1.rotation.y = Math.PI / 4;
+        scene.add(tier1);
+        const tier2 = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.3, 4), treeLeafMat2);
+        tier2.position.set(ox, oh * 0.9 - 0.38, oz);
+        tier2.rotation.y = Math.PI / 4;
+        scene.add(tier2);
+      }
+    });
 
     // Barrels near tavern
     const barrelMat = new THREE.MeshLambertMaterial({ color: 0x5c3d2e });
@@ -2216,8 +2284,20 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     // ====== PLAYER (ROGUE) ======
     const playerGroup = new THREE.Group();
 
+    // Subtle ground highlight ring so player silhouette pops against dark cobblestones
+    const playerAuraMat = new THREE.MeshBasicMaterial({
+      color: 0xf0c248,
+      transparent: true,
+      opacity: 0.42,
+      side: THREE.DoubleSide,
+    });
+    const playerAura = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.58, 16), playerAuraMat);
+    playerAura.rotation.x = -Math.PI / 2;
+    playerAura.position.y = 0.09;
+    playerGroup.add(playerAura);
+
     // Legs (dark leather boots)
-    const legMat = new THREE.MeshLambertMaterial({ color: 0x2a1a12 });
+    const legMat = new THREE.MeshLambertMaterial({ color: 0x3a2418 });
     const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.3), legMat);
     legL.position.set(-0.15, 0.25, 0);
     playerGroup.add(legL);
@@ -2225,53 +2305,59 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     legR.position.set(0.15, 0.25, 0);
     playerGroup.add(legR);
 
-    // Body (dark leather tunic)
-    const playerBodyMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-    const playerBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), playerBodyMat);
+    // Body (slate-navy leather tunic for crisp silhouette contrast)
+    const playerBodyMat = new THREE.MeshLambertMaterial({ color: 0x3a4864 });
+    const playerBody = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.8, 0.42), playerBodyMat);
     playerBody.position.y = 0.8;
     playerGroup.add(playerBody);
 
+    // Warm crimson-gold adventurer scarf/collar so character reads sharply at all zoom levels
+    const scarfMat = new THREE.MeshLambertMaterial({ color: 0xd9483b });
+    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.16, 0.48), scarfMat);
+    scarf.position.y = 1.17;
+    playerGroup.add(scarf);
+
     // Belt
-    const beltMat = new THREE.MeshLambertMaterial({ color: 0x4a3020 });
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.1, 0.45), beltMat);
+    const beltMat = new THREE.MeshLambertMaterial({ color: 0x5c3c24 });
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.1, 0.46), beltMat);
     belt.position.y = 0.55;
     playerGroup.add(belt);
     // Belt buckle
-    const buckleMat = new THREE.MeshLambertMaterial({ color: 0xccaa44 });
-    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), buckleMat);
+    const buckleMat = new THREE.MeshLambertMaterial({ color: 0xf0c248 });
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.04), buckleMat);
     buckle.position.set(0, 0.55, 0.24);
     playerGroup.add(buckle);
 
     // Head
-    const playerHeadMat = new THREE.MeshLambertMaterial({ color: 0xffcc88 });
+    const playerHeadMat = new THREE.MeshLambertMaterial({ color: 0xffd59e });
     const playerHead = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), playerHeadMat);
     playerHead.position.y = 1.45;
     playerGroup.add(playerHead);
 
-    // Hood (rogue hood - dark cloak)
-    const cloakHoodMat = new THREE.MeshLambertMaterial({ color: 0x1a1a22 });
+    // Hood (rogue hood - slate cloak with gold trim)
+    const cloakHoodMat = new THREE.MeshLambertMaterial({ color: 0x283044 });
     // Hood top
-    const hoodTop = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.6), cloakHoodMat);
+    const hoodTop = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.3, 0.62), cloakHoodMat);
     hoodTop.position.y = 1.8;
     playerGroup.add(hoodTop);
     // Hood sides
-    const hoodBack = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.5, 0.12), cloakHoodMat);
+    const hoodBack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.12), cloakHoodMat);
     hoodBack.position.set(0, 1.5, -0.3);
     playerGroup.add(hoodBack);
-    // Hood front edge
-    const hoodFront = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.08, 0.05), cloakHoodMat);
-    hoodFront.position.set(0, 1.7, 0.3);
+    // Hood front edge (gold trim)
+    const hoodFront = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.06), buckleMat);
+    hoodFront.position.set(0, 1.69, 0.3);
     playerGroup.add(hoodFront);
 
-    // Cape (flowing behind)
-    const capeMat = new THREE.MeshLambertMaterial({ color: 0x1a1a22 });
-    const cape = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.08), capeMat);
-    cape.position.set(0, 0.75, -0.25);
+    // Cape (flowing behind, crimson-lined dark cloak)
+    const capeMat = new THREE.MeshLambertMaterial({ color: 0x2b354d });
+    const cape = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.9, 0.08), capeMat);
+    cape.position.set(0, 0.75, -0.26);
     playerGroup.add(cape);
 
     // Dagger (right hand) - blade + handle
-    const bladeMat = new THREE.MeshLambertMaterial({ color: 0xccccdd });
-    const handleMat = new THREE.MeshLambertMaterial({ color: 0x4a3020 });
+    const bladeMat = new THREE.MeshLambertMaterial({ color: 0xe6e8f4 });
+    const handleMat = new THREE.MeshLambertMaterial({ color: 0x5c3c24 });
     // Right dagger
     const rBlade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.4, 0.04), bladeMat);
     rBlade.position.set(0.42, 0.75, 0.1);
@@ -2292,40 +2378,45 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
     playerGroup.add(lHandle);
 
     // Eyes (small glowing points under the hood)
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xaaffaa });
-    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.02), eyeMat);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x7cffb2 });
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.02), eyeMat);
     eyeL.position.set(-0.1, 1.5, 0.26);
     playerGroup.add(eyeL);
-    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.02), eyeMat);
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.02), eyeMat);
     eyeR.position.set(0.1, 1.5, 0.26);
     playerGroup.add(eyeR);
+
+    // Personal subtle rim light so player always remains legible in dark shadows
+    const playerRimLight = new THREE.PointLight(0xdce6ff, 1.35, 5.5, 1.4);
+    playerRimLight.position.set(0.4, 2.3, 0.5);
+    playerGroup.add(playerRimLight);
 
     playerGroup.position.copy(playerPosRef.current);
     playerGroup.castShadow = true;
     scene.add(playerGroup);
 
-    // ====== LIGHTING ======
-    // Ambient — bright enough to see everything clearly
-    const ambient = new THREE.AmbientLight(0x4444aa, 1.4);
+    // ====== LIGHTING (high-contrast moonlit night mood) ======
+    // Ambient — low enough to keep crisp face/shadow contrast while preserving night readability
+    const ambient = new THREE.AmbientLight(0x5a6cb2, 0.95);
     scene.add(ambient);
 
-    // Moonlight — strong and warm-tinted
-    const moon = new THREE.DirectionalLight(0x8888cc, 1.0);
-    moon.position.set(-10, 20, -5);
+    // Moonlight — crisp cool key light separating roof planes from facades
+    const moon = new THREE.DirectionalLight(0xcbe0ff, 1.75);
+    moon.position.set(-12, 24, 10);
     moon.castShadow = true;
     moon.shadow.mapSize.width = 2048;
     moon.shadow.mapSize.height = 2048;
     moon.shadow.camera.near = 0.5;
-    moon.shadow.camera.far = 60;
-    moon.shadow.camera.left = -25;
-    moon.shadow.camera.right = 25;
-    moon.shadow.camera.top = 25;
-    moon.shadow.camera.bottom = -25;
+    moon.shadow.camera.far = 65;
+    moon.shadow.camera.left = -28;
+    moon.shadow.camera.right = 28;
+    moon.shadow.camera.top = 28;
+    moon.shadow.camera.bottom = -28;
     scene.add(moon);
 
     // Secondary fill light from opposite side
-    const fill = new THREE.DirectionalLight(0x6655aa, 0.4);
-    fill.position.set(10, 12, 8);
+    const fill = new THREE.DirectionalLight(0x8878c8, 0.6);
+    fill.position.set(12, 12, 10);
     scene.add(fill);
 
     // Torch lights (at buildings with windows)
@@ -2478,6 +2569,7 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
         );
 
         if (step.moved) {
+          sweepDone = true;
           playerPosRef.current.x = step.x;
           playerPosRef.current.z = step.z;
 
@@ -2508,9 +2600,11 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
           lHandle.position.z = 0.1 + swing * 0.1;
 
           // Body bob
-          playerBody.position.y = 0.8 + Math.abs(Math.sin(walkCycle * 2)) * 0.04;
-          playerHead.position.y = 1.45 + Math.abs(Math.sin(walkCycle * 2)) * 0.04;
-          hoodTop.position.y = 1.8 + Math.abs(Math.sin(walkCycle * 2)) * 0.04;
+          const bobOffset = Math.abs(Math.sin(walkCycle * 2)) * 0.04;
+          playerBody.position.y = 0.8 + bobOffset;
+          scarf.position.y = 1.17 + bobOffset;
+          playerHead.position.y = 1.45 + bobOffset;
+          hoodTop.position.y = 1.8 + bobOffset;
 
           // Cape flutter
           cape.rotation.x = swing * 0.15;
@@ -2530,10 +2624,11 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
           lBlade.rotation.x *= idleDecay;
           lHandle.rotation.x *= idleDecay;
           playerBody.position.y = 0.8;
+          scarf.position.y = 1.17;
           playerHead.position.y = 1.45;
           hoodTop.position.y = 1.8;
           cape.rotation.x *= capeDecay;
-          cape.position.z = -0.25;
+          cape.position.z = -0.26;
         }
 
         playerGroup.position.set(
@@ -2541,20 +2636,33 @@ const TownWorld = ({ onInteract, onNearBuilding, modalOpen }: TownWorldProps) =>
           0,
           playerPosRef.current.z
         );
+      } else {
+        sweepDone = true;
       }
 
-      // ---- Camera follow player ----
-      const camTargetX = playerPosRef.current.x + 15;
-      const camTargetZ = playerPosRef.current.z + 15;
-      const camAlpha = expDampingAlpha(CAMERA_SMOOTH_RATE, dt);
-      camera.position.x += (camTargetX - camera.position.x) * camAlpha;
-      camera.position.z += (camTargetZ - camera.position.z) * camAlpha;
-      camera.position.y = 18;
-      camera.lookAt(
-        playerPosRef.current.x,
-        0,
-        playerPosRef.current.z
-      );
+      // ---- Opening camera sweep or smooth player follow ----
+      if (!sweepDone) {
+        sweepElapsed += dt;
+        const rawT = Math.min(sweepElapsed / SWEEP_DURATION, 1);
+        const eased = 1 - Math.pow(1 - rawT, 3);
+        camLookTarget.lerpVectors(sweepStartTarget, playerPosRef.current, eased);
+        camLookTarget.y = 0;
+        const offX = THREE.MathUtils.lerp(sweepStartOffset.x, followOffset.x, eased);
+        const offY = THREE.MathUtils.lerp(sweepStartOffset.y, followOffset.y, eased);
+        const offZ = THREE.MathUtils.lerp(sweepStartOffset.z, followOffset.z, eased);
+        camera.position.set(camLookTarget.x + offX, offY, camLookTarget.z + offZ);
+        camera.lookAt(camLookTarget);
+        if (rawT >= 1) sweepDone = true;
+      } else {
+        const camTargetX = playerPosRef.current.x + followOffset.x;
+        const camTargetZ = playerPosRef.current.z + followOffset.z;
+        const camAlpha = expDampingAlpha(CAMERA_SMOOTH_RATE, dt);
+        camera.position.x += (camTargetX - camera.position.x) * camAlpha;
+        camera.position.z += (camTargetZ - camera.position.z) * camAlpha;
+        camera.position.y = followOffset.y;
+        camLookTarget.set(playerPosRef.current.x, 0, playerPosRef.current.z);
+        camera.lookAt(camLookTarget);
+      }
 
       // ---- Proximity check ----
       let closestBuilding: BuildingDef | null = null;
