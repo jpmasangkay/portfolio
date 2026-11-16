@@ -32,6 +32,16 @@ import {
   type SecretFindDef,
 } from "@/lib/realm-progression";
 import { computeDayNightState, type DayNightState } from "@/lib/day-night";
+import {
+  QUALITY_PROFILES,
+  QualityMonitor,
+  type QualityTier,
+} from "@/lib/quality-tier";
+import {
+  batchStaticMeshes,
+  markDynamicSubtree,
+  markSharedDynamicMaterial,
+} from "@/lib/static-batcher";
 
 export interface InteriorActionPrompt {
   id: string;
@@ -56,6 +66,7 @@ interface TownWorldProps {
   foundSecrets?: ReadonlySet<string>;
   cloakEquipped?: boolean;
   nightPinned?: boolean;
+  lowGraphics?: boolean;
   exitInteriorSignal?: number;
   modalOpen: boolean;
   paused?: boolean;
@@ -98,6 +109,7 @@ const TownWorld = ({
   foundSecrets,
   cloakEquipped = false,
   nightPinned = true,
+  lowGraphics = false,
   exitInteriorSignal = 0,
   modalOpen,
   paused = false,
@@ -114,11 +126,13 @@ const TownWorld = ({
   const savedOutdoorPosRef = useRef<{ x: number; z: number }>({ x: 0, z: 8.0 });
   const exitRequestFnRef = useRef<(() => void) | null>(null);
   const enterInteriorFnRef = useRef<((id: InteriorId) => void) | null>(null);
+  const syncQualityFnRef = useRef<((low: boolean) => void) | null>(null);
   const animFrameRef = useRef<number>(0);
   const modalOpenRef = useRef(modalOpen || paused);
   const pausedRef = useRef(paused);
   const cloakEquippedRef = useRef(cloakEquipped);
   const nightPinnedRef = useRef(nightPinned);
+  const lowGraphicsRef = useRef(lowGraphics);
   const foundSecretsRef = useRef<ReadonlySet<string>>(foundSecrets ?? new Set());
   const onPlayerPosChangeRef = useRef(onPlayerPosChange);
   const onTalkVillagerRef = useRef(onTalkVillager);
@@ -159,6 +173,11 @@ const TownWorld = ({
   useEffect(() => {
     nightPinnedRef.current = nightPinned;
   }, [nightPinned]);
+
+  useEffect(() => {
+    lowGraphicsRef.current = lowGraphics;
+    syncQualityFnRef.current?.(lowGraphics);
+  }, [lowGraphics]);
 
   useEffect(() => {
     if (foundSecrets) {
@@ -1518,7 +1537,7 @@ const TownWorld = ({
     const torchLights: { light: THREE.PointLight; baseIntensity: number }[] = [];
     const lanternPostMat = new THREE.MeshLambertMaterial({ color: 0x3a3020 });
     const lanternBodyMat = new THREE.MeshLambertMaterial({ color: 0x2a2018 });
-    const lanternGlassMat = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
+    const lanternGlassMat = markSharedDynamicMaterial(new THREE.MeshBasicMaterial({ color: 0xffcc44 }));
     const lanternPostGeo = new THREE.BoxGeometry(0.15, 2.5, 0.15);
     const lanternBodyGeo = new THREE.BoxGeometry(0.3, 0.35, 0.3);
     const lanternGlassGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
@@ -2915,8 +2934,18 @@ const TownWorld = ({
     // ====== WALK-IN INTERIORS (Tavern & Wizard's Tower Cutaway Rooms) ======
     const tavernInteriorColliders: ColliderBox[] = [];
     const wizardInteriorColliders: ColliderBox[] = [];
+    const tavernRoomGroup = new THREE.Group();
+    tavernRoomGroup.name = "interior-tavern-room";
+    tavernRoomGroup.visible = false;
+    scene.add(tavernRoomGroup);
+
+    const wizardRoomGroup = new THREE.Group();
+    wizardRoomGroup.name = "interior-wizard-room";
+    wizardRoomGroup.visible = false;
+    scene.add(wizardRoomGroup);
 
     const buildInteriorShell = (
+      roomGroup: THREE.Group,
       cx: number,
       cz: number,
       floorColor: number,
@@ -2930,45 +2959,45 @@ const TownWorld = ({
       );
       floor.position.set(cx, -0.15, cz);
       floor.receiveShadow = true;
-      scene.add(floor);
+      roomGroup.add(floor);
 
       const backWall = new THREE.Mesh(
         new THREE.BoxGeometry(9.2, 4.2, 0.35),
         new THREE.MeshLambertMaterial({ color: wallColor })
       );
       backWall.position.set(cx, 2.1, cz - 3.9);
-      scene.add(backWall);
+      roomGroup.add(backWall);
 
       const leftWall = new THREE.Mesh(
         new THREE.BoxGeometry(0.35, 4.2, 7.8),
         new THREE.MeshLambertMaterial({ color: trimColor })
       );
       leftWall.position.set(cx - 4.6, 2.1, cz);
-      scene.add(leftWall);
+      roomGroup.add(leftWall);
 
       const rug = new THREE.Mesh(
         new THREE.BoxGeometry(4.4, 0.04, 3.6),
         new THREE.MeshLambertMaterial({ color: rugColor })
       );
       rug.position.set(cx, 0.02, cz + 0.6);
-      scene.add(rug);
+      roomGroup.add(rug);
 
       const exitMat = new THREE.Mesh(
         new THREE.BoxGeometry(1.8, 0.06, 1.0),
         new THREE.MeshBasicMaterial({ color: 0xf0c248 })
       );
       exitMat.position.set(cx, 0.03, cz + 3.2);
-      scene.add(exitMat);
+      roomGroup.add(exitMat);
     };
 
     // --- 1) The Tavern Interior centered at (0, 0, 72) ---
-    buildInteriorShell(0, 72, 0x5c3c24, 0x6f4b2f, 0x4b311d, 0x7b2d2d);
+    buildInteriorShell(tavernRoomGroup, 0, 72, 0x5c3c24, 0x6f4b2f, 0x4b311d, 0x7b2d2d);
     const barCounter = new THREE.Mesh(
       new THREE.BoxGeometry(3.6, 1.1, 1.0),
       new THREE.MeshLambertMaterial({ color: 0x3b2414 })
     );
     barCounter.position.set(2.2, 0.55, 69.8);
-    scene.add(barCounter);
+    tavernRoomGroup.add(barCounter);
     tavernInteriorColliders.push({ minX: 0.4, maxX: 4.0, minZ: 69.2, maxZ: 70.4, label: "tavern-bar" });
 
     const dossierDesk = new THREE.Mesh(
@@ -2976,13 +3005,13 @@ const TownWorld = ({
       new THREE.MeshLambertMaterial({ color: 0x7a5230 })
     );
     dossierDesk.position.set(-2.0, 0.45, 70.1);
-    scene.add(dossierDesk);
+    tavernRoomGroup.add(dossierDesk);
     const dossierBook = new THREE.Mesh(
       new THREE.BoxGeometry(0.7, 0.14, 0.55),
       new THREE.MeshBasicMaterial({ color: 0xf4c855 })
     );
     dossierBook.position.set(-2.0, 0.96, 70.1);
-    scene.add(dossierBook);
+    tavernRoomGroup.add(dossierBook);
     tavernInteriorColliders.push({ minX: -3.0, maxX: -1.0, minZ: 69.5, maxZ: 70.7, label: "tavern-desk" });
 
     const tavernHearth = new THREE.Mesh(
@@ -2990,29 +3019,29 @@ const TownWorld = ({
       new THREE.MeshLambertMaterial({ color: 0x4a4552 })
     );
     tavernHearth.position.set(-4.1, 1.2, 72.2);
-    scene.add(tavernHearth);
+    tavernRoomGroup.add(tavernHearth);
     const hearthEmbers = new THREE.Mesh(
       new THREE.BoxGeometry(0.7, 0.4, 0.5),
       new THREE.MeshBasicMaterial({ color: 0xff7722 })
     );
     hearthEmbers.position.set(-3.75, 0.3, 72.2);
-    scene.add(hearthEmbers);
+    tavernRoomGroup.add(hearthEmbers);
     tavernInteriorColliders.push({ minX: -4.4, maxX: -3.4, minZ: 71.7, maxZ: 72.7, label: "tavern-hearth" });
 
     // --- 2) Wizard's Tower Interior centered at (32, 0, 72) ---
-    buildInteriorShell(32, 72, 0x2b2844, 0x3f3660, 0x2e2748, 0x3c527a);
+    buildInteriorShell(wizardRoomGroup, 32, 72, 0x2b2844, 0x3f3660, 0x2e2748, 0x3c527a);
     const orbPedestal = new THREE.Mesh(
       new THREE.CylinderGeometry(0.55, 0.7, 1.1, 8),
       new THREE.MeshLambertMaterial({ color: 0x4b446e })
     );
     orbPedestal.position.set(32, 0.55, 70.2);
-    scene.add(orbPedestal);
+    wizardRoomGroup.add(orbPedestal);
     const interiorScryOrb = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.45, 0),
       new THREE.MeshBasicMaterial({ color: 0xbb77ff })
     );
     interiorScryOrb.position.set(32, 1.65, 70.2);
-    scene.add(interiorScryOrb);
+    wizardRoomGroup.add(interiorScryOrb);
     wizardInteriorColliders.push({ minX: 31.3, maxX: 32.7, minZ: 69.5, maxZ: 70.9, label: "wizard-pedestal" });
 
     const bookshelf = new THREE.Mesh(
@@ -3020,13 +3049,13 @@ const TownWorld = ({
       new THREE.MeshLambertMaterial({ color: 0x513826 })
     );
     bookshelf.position.set(34.6, 1.2, 68.7);
-    scene.add(bookshelf);
+    wizardRoomGroup.add(bookshelf);
     const tomeAccent = new THREE.Mesh(
       new THREE.BoxGeometry(0.45, 0.35, 0.2),
       new THREE.MeshBasicMaterial({ color: 0x5ae2ff })
     );
     tomeAccent.position.set(34.6, 1.5, 69.1);
-    scene.add(tomeAccent);
+    wizardRoomGroup.add(tomeAccent);
     wizardInteriorColliders.push({ minX: 33.2, maxX: 36.0, minZ: 68.4, maxZ: 69.4, label: "wizard-bookshelf" });
 
     // ====== GENTLE ATMOSPHERIC RAIN (lightweight single Points pass) ======
@@ -3138,6 +3167,43 @@ const TownWorld = ({
     });
     scene.add(new THREE.Points(starGeo, starMat));
 
+    // ====== STATIC GEOMETRY BATCHING & ZONE VISIBILITY GROUPS ======
+    markDynamicSubtree(playerGroup);
+    markDynamicSubtree(familiarGroup);
+    for (const vr of villagerRuntimes) markDynamicSubtree(vr.group);
+    for (const item of secretItems) markDynamicSubtree(item.group);
+    for (const b of beacons) {
+      markDynamicSubtree(b.mesh);
+      markDynamicSubtree(b.glow);
+    }
+    for (const crystal of crystals) markDynamicSubtree(crystal);
+    for (const cube of fireCubes) markDynamicSubtree(cube);
+    markDynamicSubtree(magicCircle);
+    markDynamicSubtree(innerCircle);
+    markDynamicSubtree(lakeBoatGroup);
+    markDynamicSubtree(hillFlame);
+    markDynamicSubtree(hearthEmbers);
+    markDynamicSubtree(interiorScryOrb);
+
+    const outdoorWorldGroup = new THREE.Group();
+    outdoorWorldGroup.name = "outdoor-world-group";
+    const keepAtSceneRoot = new Set<THREE.Object3D>([
+      playerGroup,
+      familiarGroup,
+      tavernRoomGroup,
+      wizardRoomGroup,
+      rainPoints,
+    ]);
+    for (const child of [...scene.children]) {
+      if (keepAtSceneRoot.has(child) || child instanceof THREE.Light) continue;
+      outdoorWorldGroup.add(child);
+    }
+    scene.add(outdoorWorldGroup);
+
+    batchStaticMeshes(outdoorWorldGroup, outdoorWorldGroup, 18);
+    batchStaticMeshes(tavernRoomGroup, tavernRoomGroup, 18);
+    batchStaticMeshes(wizardRoomGroup, wizardRoomGroup, 18);
+
     // ====== INPUT ======
     const GAME_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "e"]);
     const isInteractiveElement = (target: EventTarget | null) =>
@@ -3171,7 +3237,42 @@ const TownWorld = ({
     window.addEventListener("blur", clearHeldInputs);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    // ====== RESIZE ======
+    // ====== QUALITY TIER & RESIZE ======
+    const qualityMonitor = new QualityMonitor();
+    let activeQualityTier: QualityTier = lowGraphicsRef.current ? 4 : 0;
+    let appliedResScale = 1.0;
+
+    const applyQualityProfile = (tier: QualityTier) => {
+      activeQualityTier = tier;
+      const profile = QUALITY_PROFILES[tier];
+      if (moon.shadow.mapSize.width !== profile.shadowMapSize) {
+        moon.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+        if (moon.shadow.map) {
+          moon.shadow.map.dispose();
+          moon.shadow.map = null;
+        }
+        renderer.shadowMap.needsUpdate = true;
+      }
+      const inRoom = currentInteriorRef.current !== null;
+      for (const { light } of torchLights) {
+        light.visible = profile.dynamicLightsEnabled && !inRoom;
+      }
+      playerRimLight.visible = profile.dynamicLightsEnabled;
+
+      if (appliedResScale !== profile.resolutionScale) {
+        appliedResScale = profile.resolutionScale;
+        const rw = Math.max(160, Math.floor((window.innerWidth / PIXEL_SCALE) * appliedResScale));
+        const rh = Math.max(120, Math.floor((window.innerHeight / PIXEL_SCALE) * appliedResScale));
+        renderTarget.setSize(rw, rh);
+      }
+    };
+
+    applyQualityProfile(activeQualityTier);
+    syncQualityFnRef.current = (low: boolean) => {
+      qualityMonitor.reset();
+      applyQualityProfile(low ? 4 : 0);
+    };
+
     const onResize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -3182,7 +3283,11 @@ const TownWorld = ({
       camera.bottom = f.bottom;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-      renderTarget.setSize(Math.floor(w / PIXEL_SCALE), Math.floor(h / PIXEL_SCALE));
+      const scale = QUALITY_PROFILES[activeQualityTier].resolutionScale;
+      renderTarget.setSize(
+        Math.max(160, Math.floor((w / PIXEL_SCALE) * scale)),
+        Math.max(120, Math.floor((h / PIXEL_SCALE) * scale))
+      );
     };
     window.addEventListener("resize", onResize);
 
@@ -3221,6 +3326,10 @@ const TownWorld = ({
     enterInteriorFnRef.current = (id: InteriorId) => {
       savedOutdoorPosRef.current = { x: playerPosRef.current.x, z: playerPosRef.current.z };
       currentInteriorRef.current = id;
+      outdoorWorldGroup.visible = false;
+      tavernRoomGroup.visible = id === "tavern";
+      wizardRoomGroup.visible = id === "wizard";
+      applyQualityProfile(activeQualityTier);
       const roomCenterX = id === "tavern" ? 0 : 32;
       playerPosRef.current.set(roomCenterX, 0, 74.2);
       playerGroup.rotation.y = Math.PI;
@@ -3240,6 +3349,10 @@ const TownWorld = ({
     exitRequestFnRef.current = () => {
       const prevId = currentInteriorRef.current;
       currentInteriorRef.current = null;
+      outdoorWorldGroup.visible = true;
+      tavernRoomGroup.visible = false;
+      wizardRoomGroup.visible = false;
+      applyQualityProfile(activeQualityTier);
       nearInteriorActionRef.current = null;
       onNearInteriorActionRef.current?.(null);
       const preferredDoorPos =
@@ -3275,9 +3388,16 @@ const TownWorld = ({
         lastTime = now;
         return;
       }
-      const dt = clampDeltaSec(now - lastTime);
+      const rawFrameMs = now - lastTime;
+      const dt = clampDeltaSec(rawFrameMs);
       lastTime = now;
       elapsed += dt;
+      if (!lowGraphicsRef.current) {
+        const nextTier = qualityMonitor.recordFrame(rawFrameMs);
+        if (nextTier !== null) {
+          applyQualityProfile(nextTier);
+        }
+      }
       const keys = keysRef.current;
       const insideRoom = currentInteriorRef.current;
 
@@ -3492,8 +3612,10 @@ const TownWorld = ({
       }
 
       // ---- Day/Night cycle & optional gentle weather ----
+      const qualityProfile = QUALITY_PROFILES[activeQualityTier];
       const dayNight = computeDayNightState(elapsed / DAY_CYCLE_DURATION_SEC, nightPinnedRef.current);
-      const isRaining = !insideRoom && !prefersReducedMotion && (elapsed % 60) > 36;
+      const isRaining =
+        qualityProfile.rainEnabled && !insideRoom && !prefersReducedMotion && (elapsed % 60) > 36;
       ambient.intensity = insideRoom ? 1.35 : dayNight.ambientIntensity;
       moon.intensity = insideRoom ? 1.65 : dayNight.dirIntensity;
       moon.color.setHex(insideRoom ? 0xffe4b8 : dayNight.dirColorHex);
@@ -3705,16 +3827,18 @@ const TownWorld = ({
       }
 
       // ---- Torch flicker (street lanterns scale smoothly with dusk/night) ----
-      torchLights.forEach(({ light, baseIntensity }, i) => {
-        const isLantern = baseIntensity <= 1.6;
-        const factor = isLantern ? 0.2 + 0.8 * dayNight.lanternFactor : 1;
-        light.intensity =
-          (baseIntensity +
-            Math.sin(elapsed * 8 + i * 2) * 0.4 +
-            Math.sin(elapsed * 13 + i * 5) * 0.2 +
-            Math.random() * 0.1) *
-          factor;
-      });
+      if (qualityProfile.dynamicLightsEnabled && !insideRoom) {
+        torchLights.forEach(({ light, baseIntensity }, i) => {
+          const isLantern = baseIntensity <= 1.6;
+          const factor = isLantern ? 0.2 + 0.8 * dayNight.lanternFactor : 1;
+          light.intensity =
+            (baseIntensity +
+              Math.sin(elapsed * 8 + i * 2) * 0.4 +
+              Math.sin(elapsed * 13 + i * 5) * 0.2 +
+              Math.random() * 0.1) *
+            factor;
+        });
+      }
 
       // ---- Fireflies ----
       const pp = particleGeo.attributes.position.array as Float32Array;
@@ -3791,6 +3915,21 @@ const TownWorld = ({
       // ---- Render pixelated ----
       renderer.setRenderTarget(renderTarget);
       renderer.render(scene, camera);
+      const winDebug = window as unknown as {
+        __TOWN_RENDERER_INFO__?: { calls: number; triangles: number };
+        __TOWN_QUALITY__?: { tier: QualityTier; lowGraphics: boolean; renderWidth: number; renderHeight: number; shadowSize: number };
+      };
+      winDebug.__TOWN_RENDERER_INFO__ = {
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+      };
+      winDebug.__TOWN_QUALITY__ = {
+        tier: activeQualityTier,
+        lowGraphics: lowGraphicsRef.current,
+        renderWidth: renderTarget.width,
+        renderHeight: renderTarget.height,
+        shadowSize: moon.shadow.mapSize.width,
+      };
       renderer.setRenderTarget(null);
       renderer.render(screenScene, screenCam);
     };

@@ -18,4 +18,16 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const norm = id.replace(/\\/g, "/");
+          if (norm.includes("/node_modules/three/")) {
+            return "three";
+          }
+        },
+      },
+    },
+  },
 }));

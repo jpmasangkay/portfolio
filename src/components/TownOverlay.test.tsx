@@ -99,6 +99,7 @@ describe("TownOverlay and QuickViewPortfolio", () => {
 
   it("supports night pin toggle and walk-in interior leave button", () => {
     const onToggleNightPin = vi.fn();
+    const onToggleLowGraphics = vi.fn();
     const onExitInterior = vi.fn();
 
     render(
@@ -117,12 +118,14 @@ describe("TownOverlay and QuickViewPortfolio", () => {
         secretsFoundCount={2}
         totalSecretsCount={5}
         nightPinned={true}
+        lowGraphics={true}
         modalOpen={false}
         visitedBuildings={new Set(["tavern"])}
         playerPos={{ x: 0, z: 72 }}
         onSelectBuilding={vi.fn()}
         onToggleQuickView={vi.fn()}
         onToggleNightPin={onToggleNightPin}
+        onToggleLowGraphics={onToggleLowGraphics}
         onExitInterior={onExitInterior}
       />
     );
@@ -134,6 +137,11 @@ describe("TownOverlay and QuickViewPortfolio", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /📌 Night/i }));
     expect(onToggleNightPin).toHaveBeenCalledTimes(1);
+
+    const lowBtn = screen.getByRole("button", { name: /Low graphics/i });
+    expect(lowBtn).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(lowBtn);
+    expect(onToggleLowGraphics).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Leave Room/i }));
     expect(onExitInterior).toHaveBeenCalledTimes(1);

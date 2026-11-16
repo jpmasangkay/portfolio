@@ -45,6 +45,7 @@ import {
   isAudioMuted,
   subscribeAudioMuted,
 } from "@/lib/sound-engine";
+import { loadLowGraphicsFlag, saveLowGraphicsFlag } from "@/lib/quality-tier";
 
 const VISITED_STORAGE_KEY = "shealtiel_visited_buildings_v1";
 const VISITED_ZONES_STORAGE_KEY = "shealtiel_visited_zones_v1";
@@ -129,6 +130,7 @@ const Index = () => {
   const [greetedByRowan, setGreetedByRowan] = useState<boolean>(() => loadBooleanFlag(GREETED_STORAGE_KEY));
   const [cloakEquipped, setCloakEquipped] = useState<boolean>(() => loadBooleanFlag(CLOAK_STORAGE_KEY));
   const [nightPinned, setNightPinned] = useState<boolean>(() => loadBooleanFlag(NIGHT_PIN_STORAGE_KEY));
+  const [lowGraphics, setLowGraphics] = useState<boolean>(() => loadLowGraphicsFlag());
   const [timeInfo, setTimeInfo] = useState<{ label: string; emoji: string; raining: boolean }>({
     label: "Midnight",
     emoji: "🌙",
@@ -172,6 +174,10 @@ const Index = () => {
       // Ignore storage write errors
     }
   }, [cloakEquipped]);
+
+  useEffect(() => {
+    saveLowGraphicsFlag(lowGraphics);
+  }, [lowGraphics]);
 
   useEffect(() => {
     try {
@@ -326,6 +332,7 @@ const Index = () => {
         foundSecrets={foundSecrets}
         cloakEquipped={cloakEquipped}
         nightPinned={nightPinned}
+        lowGraphics={lowGraphics}
         exitInteriorSignal={exitInteriorSignal}
         modalOpen={anyModalOpen}
         paused={quickView}
@@ -349,6 +356,7 @@ const Index = () => {
           totalSecretsCount={SECRET_FINDS.length}
           timeInfo={timeInfo}
           nightPinned={nightPinned}
+          lowGraphics={lowGraphics}
           discoveryToast={discoveryToast}
           modalOpen={anyModalOpen}
           visitedBuildings={visitedBuildings}
@@ -366,6 +374,7 @@ const Index = () => {
             setQuestLogOpen(true);
           }}
           onToggleNightPin={() => setNightPinned((n) => !n)}
+          onToggleLowGraphics={() => setLowGraphics((v) => !v)}
           onExitInterior={() => setExitInteriorSignal((c) => c + 1)}
         />
       )}

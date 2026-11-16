@@ -1,10 +1,10 @@
-import tavernImage from "@/assets/blender-tavern.png";
-import wallowsPoster from "@/assets/photoshop-wallows.png";
-import nexonPoster from "@/assets/photoshop-nexon.png";
-import magazineFrontBack from "@/assets/magazine-front-back.png";
-import magazinePages1to6 from "@/assets/magazine-pages-1-6.png";
-import magazinePages2to5 from "@/assets/magazine-pages-2-5.png";
-import magazinePages3to4 from "@/assets/magazine-pages-3-4.png";
+import tavernImage from "@/assets/blender-tavern.webp";
+import wallowsPoster from "@/assets/photoshop-wallows.webp";
+import nexonPoster from "@/assets/photoshop-nexon.webp";
+import magazineFrontBack from "@/assets/magazine-front-back.webp";
+import magazinePages1to6 from "@/assets/magazine-pages-1-6.webp";
+import magazinePages2to5 from "@/assets/magazine-pages-2-5.webp";
+import magazinePages3to4 from "@/assets/magazine-pages-3-4.webp";
 
 export interface ArtworkItem {
   title: string;

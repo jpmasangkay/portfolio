@@ -27,6 +27,7 @@ interface TownOverlayProps {
   totalSecretsCount?: number;
   timeInfo?: { label: string; emoji: string; raining: boolean };
   nightPinned?: boolean;
+  lowGraphics?: boolean;
   discoveryToast?: string | null;
   modalOpen: boolean;
   visitedBuildings: ReadonlySet<BuildingId>;
@@ -35,6 +36,7 @@ interface TownOverlayProps {
   onToggleQuickView: () => void;
   onOpenQuestLog?: () => void;
   onToggleNightPin?: () => void;
+  onToggleLowGraphics?: () => void;
   onExitInterior?: () => void;
 }
 
@@ -66,6 +68,7 @@ const TownOverlay = ({
   totalSecretsCount = 5,
   timeInfo = { label: "Midnight", emoji: "🌙", raining: false },
   nightPinned = true,
+  lowGraphics = false,
   discoveryToast = null,
   modalOpen,
   visitedBuildings,
@@ -74,6 +77,7 @@ const TownOverlay = ({
   onToggleQuickView,
   onOpenQuestLog,
   onToggleNightPin,
+  onToggleLowGraphics,
   onExitInterior,
 }: TownOverlayProps) => {
   const [guideOpen, setGuideOpen] = useState(false);
@@ -377,6 +381,36 @@ const TownOverlay = ({
               </span>
               <span style={{ color: nightPinned ? "hsl(150, 55%, 62%)" : "hsl(38, 85%, 62%)" }}>
                 {nightPinned ? "📌 Night" : "↻ Cycle"}
+              </span>
+            </button>
+          )}
+          {onToggleLowGraphics && (
+            <button
+              type="button"
+              id="low-graphics-toggle"
+              aria-pressed={lowGraphics}
+              onClick={onToggleLowGraphics}
+              title={lowGraphics ? "Low graphics enabled (click for auto quality)" : "Auto graphics quality (click to force Low graphics)"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 6,
+                background: lowGraphics
+                  ? "hsla(38, 60%, 20%, 0.55)"
+                  : "hsla(250, 22%, 15%, 0.8)",
+                border: "1px solid hsla(250, 15%, 30%, 0.75)",
+                padding: "3px 6px",
+                cursor: "pointer",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10.5,
+                color: "hsl(40, 22%, 86%)",
+                borderRadius: 2,
+              }}
+            >
+              <span>⚡ Low graphics</span>
+              <span style={{ color: lowGraphics ? "hsl(38, 85%, 62%)" : "hsl(150, 55%, 62%)" }}>
+                {lowGraphics ? "ON" : "AUTO"}
               </span>
             </button>
           )}
@@ -972,6 +1006,7 @@ const TownOverlay = ({
         #quick-view-toggle:focus-visible,
         #unvisited-compass:focus-visible,
         #night-pin-toggle:focus-visible,
+        #low-graphics-toggle:focus-visible,
         #exit-interior-btn:focus-visible {
           outline: 2px solid hsl(38, 85%, 55%);
           outline-offset: 2px;
