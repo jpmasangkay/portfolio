@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { forgeWorks } from "@/data/media-works";
 import ImageLightbox from "@/components/ImageLightbox";
+import MediaThumbnail from "@/components/MediaThumbnail";
 
 const modalText: React.CSSProperties = {
   fontFamily: "'MedievalSharp', serif",
@@ -22,7 +23,7 @@ const ForgeModal = () => {
       <div
         style={{
           background: "hsla(250, 15%, 12%, 0.6)",
-          border: "2px solid hsl(250, 15%, 22%)",
+          border: "1px solid hsl(250, 15%, 24%)",
           overflow: "hidden",
           boxShadow: "3px 3px 0 rgba(0,0,0,0.3)",
         }}
@@ -31,6 +32,7 @@ const ForgeModal = () => {
           type="button"
           onClick={() => setLightboxIdx(0)}
           aria-label={`Inspect ${work.title} full size`}
+          className="forge-preview-btn"
           style={{
             display: "block",
             width: "100%",
@@ -40,11 +42,7 @@ const ForgeModal = () => {
             cursor: "zoom-in",
           }}
         >
-          <img
-            src={work.image}
-            alt={work.alt}
-            style={{ width: "100%", height: "auto", display: "block" }}
-          />
+          <MediaThumbnail src={work.image} alt={work.alt} aspectHint="16 / 9" />
         </button>
         <div style={{ padding: "14px 16px" }}>
           <p
@@ -91,6 +89,12 @@ const ForgeModal = () => {
         activeIndex={lightboxIdx}
         onChangeIndex={setLightboxIdx}
       />
+      <style>{`
+        .forge-preview-btn:focus-visible {
+          outline: 2px solid hsl(38, 85%, 55%);
+          outline-offset: -2px;
+        }
+      `}</style>
     </div>
   );
 };

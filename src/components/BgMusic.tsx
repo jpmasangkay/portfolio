@@ -47,6 +47,8 @@ const BgMusic = () => {
   return (
     <button
       id="bgm-toggle"
+      type="button"
+      aria-pressed={playing}
       onClick={toggleMusic}
       title={playing ? "Mute music" : "Play music"}
       style={{
@@ -56,17 +58,18 @@ const BgMusic = () => {
         zIndex: 100,
         fontFamily: "'Press Start 2P', cursive",
         fontSize: "8px",
-        color: playing ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 45%)",
+        color: playing ? "hsl(38, 85%, 55%)" : "hsl(250, 10%, 60%)",
         background: "hsla(255, 20%, 7%, 0.9)",
-        border: `2px solid ${playing ? "hsl(38, 85%, 55%)" : "hsla(250, 15%, 25%, 0.6)"}`,
+        border: `1px solid ${playing ? "hsl(38, 85%, 55%)" : "hsla(250, 15%, 28%, 0.8)"}`,
         padding: "8px 14px",
+        minHeight: 32,
         cursor: "pointer",
         letterSpacing: "0.05em",
-        transition: "all 0.2s ease",
+        transition: "border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.2s ease",
         pointerEvents: "auto",
         boxShadow: playing
-          ? "0 0 12px hsla(38, 85%, 55%, 0.3)"
-          : "0 0 8px rgba(0,0,0,0.5)",
+          ? "0 0 12px hsla(38, 85%, 55%, 0.25)"
+          : "0 2px 8px rgba(0,0,0,0.45)",
       }}
     >
       {playing ? "🎵 ON" : "🔇 MUSIC"}

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import ScrollModal from "./ScrollModal";
+import ImageLightbox from "./ImageLightbox";
 
 describe("ScrollModal", () => {
   it("renders nothing when closed", () => {
@@ -35,5 +36,33 @@ describe("ScrollModal", () => {
     const overlay = container.querySelector(".scroll-modal-overlay")!;
     fireEvent.click(overlay);
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it("yields Escape key dismissal when a nested ImageLightbox is open above it", () => {
+    HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    });
+    HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    });
+
+    const onCloseModal = vi.fn();
+    const onChangeLightbox = vi.fn();
+
+    render(
+      <ScrollModal open={true} onClose={onCloseModal} title="The Gallery" emoji="🎨">
+        <ImageLightbox
+          items={[{ src: "/poster.webp", alt: "Poster", title: "Tour Poster" }]}
+          activeIndex={0}
+          onChangeIndex={onChangeLightbox}
+        />
+      </ScrollModal>
+    );
+
+    // Pressing Escape while nested lightbox is open must close only the lightbox, not ScrollModal
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onChangeLightbox).toHaveBeenCalledWith(null);
+    expect(onCloseModal).not.toHaveBeenCalled();
   });
 });

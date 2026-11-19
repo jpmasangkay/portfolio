@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { personalInfo, type BuildingId } from "@/data/portfolio-data";
 import { SECRET_FINDS } from "@/lib/realm-progression";
 import { TOWN_BUILDINGS_LAYOUT } from "@/lib/town-buildings";
@@ -39,6 +39,9 @@ const QuestLogModal = ({
   onOpenQuickView,
 }: QuestLogModalProps) => {
   const [copied, setCopied] = useState(false);
+  const [copyMsg, setCopyMsg] = useState("");
+  const copyTimerRef = useRef<number | null>(null);
+  const lastMsgRef = useRef("");
   const visitedCount = visitedBuildings.size;
   const totalLandmarks = TOWN_BUILDINGS_LAYOUT.length;
   const mainQuestComplete = visitedCount >= totalLandmarks;
@@ -47,13 +50,23 @@ const QuestLogModal = ({
   const outskirtCount = outskirtZones.filter((z) => visitedZones.has(z)).length;
 
   const handleCopyEmail = async () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    let ok = false;
     try {
       await navigator.clipboard.writeText(personalInfo.email);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      ok = true;
     } catch {
-      // Fallback ignored if clipboard blocked
+      ok = false;
     }
+    let msg = ok ? "Copied" : "Copy failed";
+    if (msg === lastMsgRef.current) msg += "\u00A0";
+    lastMsgRef.current = msg;
+    setCopied(ok);
+    setCopyMsg(msg);
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      setCopyMsg("");
+    }, 2000);
   };
 
   return (
@@ -369,21 +382,38 @@ const QuestLogModal = ({
                 >
                   ✉ Email Shealtiel
                 </a>
-                <button
-                  type="button"
-                  onClick={handleCopyEmail}
-                  style={{
-                    padding: "7px 11px",
-                    background: "hsl(252, 16%, 16%)",
-                    border: "1px solid hsl(250, 15%, 30%)",
-                    color: "hsl(40, 25%, 88%)",
-                    cursor: "pointer",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 11.5,
-                  }}
-                >
-                  {copied ? "✓ Email Copied" : "Copy Email"}
-                </button>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={handleCopyEmail}
+                    data-copied={copied ? "" : undefined}
+                    style={{
+                      padding: "7px 11px",
+                      background: "hsl(252, 16%, 16%)",
+                      border: "1px solid hsl(250, 15%, 30%)",
+                      color: "hsl(40, 25%, 88%)",
+                      cursor: "pointer",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11.5,
+                    }}
+                  >
+                    {copied ? "✓ Email Copied" : "Copy Email"}
+                  </button>
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      color: "hsl(150, 60%, 62%)",
+                      opacity: copyMsg ? 1 : 0,
+                      width: copyMsg ? "auto" : 0,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {copyMsg}
+                  </span>
+                </span>
                 <button
                   type="button"
                   onClick={onOpenQuickView}
@@ -399,6 +429,21 @@ const QuestLogModal = ({
                 >
                   📄 Plain Resume View
                 </button>
+                <a
+                  href={`${import.meta.env.BASE_URL}${personalInfo.resumePdf}`}
+                  download={personalInfo.resumePdf}
+                  style={{
+                    padding: "7px 11px",
+                    background: "hsl(252, 16%, 16%)",
+                    border: "1px solid hsla(150, 45%, 42%, 0.6)",
+                    color: "hsl(150, 55%, 62%)",
+                    textDecoration: "none",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11.5,
+                  }}
+                >
+                  ⬇ Download PDF
+                </a>
               </div>
             </div>
           </div>

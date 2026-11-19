@@ -357,6 +357,7 @@ const TownOverlay = ({
             <button
               type="button"
               id="night-pin-toggle"
+              aria-pressed={nightPinned}
               onClick={onToggleNightPin}
               title={nightPinned ? "Time pinned to midnight (click to allow cycle)" : "Day/night cycling active (click to pin night)"}
               style={{
@@ -492,6 +493,8 @@ const TownOverlay = ({
           <button
             type="button"
             className="show-mobile top-hud-btn"
+            aria-expanded={guideOpen}
+            aria-controls="mobile-guide-panel"
             onClick={() => setGuideOpen(!guideOpen)}
             style={{
               alignItems: "center",
@@ -580,6 +583,7 @@ const TownOverlay = ({
         {/* Mobile collapsible Building Guide + Minimap */}
         {guideOpen && (
           <div
+            id="mobile-guide-panel"
             className="show-mobile"
             style={{
               position: "relative",
@@ -771,46 +775,59 @@ const TownOverlay = ({
         >
           <svg width={108} height={108} viewBox="0 0 108 108" role="img" aria-label="Town minimap showing visited and unvisited buildings">
             <rect x={0} y={0} width={108} height={108} fill="#121428" stroke="#2d3048" strokeWidth={1} />
-            {/* Isometric road hints across town & outskirts */}
+            {/* Isometric town wall diamond, outskirt biomes & road network */}
             {(() => {
-              const nEnd = toMinimapCoords(0, -28);
-              const sEnd = toMinimapCoords(0, 18);
-              const wEnd = toMinimapCoords(-30, 0);
-              const eEnd = toMinimapCoords(30, 0);
-              const forest = toMinimapCoords(-27, 0);
-              const lakeside = toMinimapCoords(27, 0);
-              const ruins = toMinimapCoords(0, -27);
+              const nw = toMinimapCoords(-18, -16);
+              const ne = toMinimapCoords(18, -16);
+              const se = toMinimapCoords(18, 18);
+              const sw = toMinimapCoords(-18, 18);
+              const nEnd = toMinimapCoords(0, -29);
+              const sEnd = toMinimapCoords(0, 19);
+              const wEnd = toMinimapCoords(-28, 0);
+              const eEnd = toMinimapCoords(29, 0);
+              const forestGlade = toMinimapCoords(-28, 9);
+              const lakeside = toMinimapCoords(32, 0);
+              const ruins = toMinimapCoords(0, -29);
               return (
                 <>
+                  {/* Town courtyard & fortified perimeter diamond */}
+                  <polygon
+                    points={`${nw.mx},${nw.my} ${ne.mx},${ne.my} ${se.mx},${se.my} ${sw.mx},${sw.my}`}
+                    fill="#1b2b22"
+                    stroke="#53506a"
+                    strokeWidth={1.25}
+                  />
+                  {/* Outskirt zone markers */}
+                  <circle cx={forestGlade.mx} cy={forestGlade.my} r={5.5} fill="#1f4933" stroke="#356e4e" strokeWidth={0.8} opacity={0.9}>
+                    <title>Whispering Forest Glade (West)</title>
+                  </circle>
+                  <circle cx={lakeside.mx} cy={lakeside.my} r={6} fill="#1d4d7a" stroke="#397cb8" strokeWidth={0.8} opacity={0.9}>
+                    <title>Moonlit Lakeside (East)</title>
+                  </circle>
+                  <circle cx={ruins.mx} cy={ruins.my} r={5} fill="#463a4f" stroke="#7d698c" strokeWidth={0.8} opacity={0.9}>
+                    <title>Ruined Hilltop (North)</title>
+                  </circle>
+                  {/* Main crossroad lines */}
                   <line
                     x1={nEnd.mx}
                     y1={nEnd.my}
                     x2={sEnd.mx}
                     y2={sEnd.my}
-                    stroke="#3c3740"
-                    strokeWidth={2.5}
-                    strokeDasharray="2 2"
-                    opacity={0.55}
+                    stroke="#61564a"
+                    strokeWidth={2}
+                    strokeDasharray="2 1.5"
+                    opacity={0.75}
                   />
                   <line
                     x1={wEnd.mx}
                     y1={wEnd.my}
                     x2={eEnd.mx}
                     y2={eEnd.my}
-                    stroke="#3c3740"
-                    strokeWidth={2.5}
-                    strokeDasharray="2 2"
-                    opacity={0.55}
+                    stroke="#61564a"
+                    strokeWidth={2}
+                    strokeDasharray="2 1.5"
+                    opacity={0.75}
                   />
-                  <circle cx={forest.mx} cy={forest.my} r={3} fill="#25543e" opacity={0.85}>
-                    <title>Whispering Forest (West)</title>
-                  </circle>
-                  <circle cx={lakeside.mx} cy={lakeside.my} r={3} fill="#2a6b9e" opacity={0.85}>
-                    <title>Moonlit Lakeside (East)</title>
-                  </circle>
-                  <circle cx={ruins.mx} cy={ruins.my} r={3} fill="#9e5a34" opacity={0.85}>
-                    <title>Ruined Hilltop (North)</title>
-                  </circle>
                 </>
               );
             })()}
@@ -829,17 +846,17 @@ const TownOverlay = ({
                     <circle
                       cx={mx}
                       cy={my}
-                      r={6.5}
+                      r={5.2}
                       fill="none"
                       stroke={b.beaconColorCss}
-                      strokeWidth={1}
+                      strokeWidth={0.9}
                       opacity={0.75}
                     />
                   )}
                   <circle
                     cx={mx}
                     cy={my}
-                    r={3.8}
+                    r={3.2}
                     fill={visited ? "#3b8a64" : b.beaconColorCss}
                     stroke="#0d0e1a"
                     strokeWidth={1}
@@ -851,7 +868,7 @@ const TownOverlay = ({
             <circle
               cx={playerMapPos.mx}
               cy={playerMapPos.my}
-              r={3.5}
+              r={3.3}
               fill="#f0c248"
               stroke="#ffffff"
               strokeWidth={1.2}
@@ -997,11 +1014,26 @@ const TownOverlay = ({
           z-index: 20;
           min-width: 170px;
         }
-        .guide-item-btn:hover {
+        .guide-item-btn:hover,
+        .top-hud-btn:hover,
+        #unvisited-compass:hover,
+        #night-pin-toggle:hover,
+        #low-graphics-toggle:hover {
           border-color: hsl(38, 85%, 55%) !important;
+        }
+        .guide-item-btn:hover {
           transform: translateX(-2px);
         }
+        .guide-item-btn:active,
+        .top-hud-btn:active,
+        #unvisited-compass:active,
+        #night-pin-toggle:active,
+        #low-graphics-toggle:active,
+        #exit-interior-btn:active {
+          transform: scale(0.97);
+        }
         .guide-item-btn:focus-visible,
+        .top-hud-btn:focus-visible,
         #quest-log-toggle:focus-visible,
         #quick-view-toggle:focus-visible,
         #unvisited-compass:focus-visible,

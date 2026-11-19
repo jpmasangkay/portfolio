@@ -77,23 +77,32 @@ const ImageLightbox = ({ items, activeIndex, onChangeIndex }: ImageLightboxProps
   }, [onChangeIndex]);
 
   useEffect(() => {
-    if (!isOpen || items.length <= 1) return;
-    const handleArrows = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (dialogRef.current?.open && typeof dialogRef.current.close === "function") {
+          dialogRef.current.close();
+        } else {
+          onChangeIndex(null);
+        }
+      } else if (items.length > 1 && e.key === "ArrowLeft") {
         e.preventDefault();
         onChangeIndex((activeIndex! - 1 + items.length) % items.length);
-      } else if (e.key === "ArrowRight") {
+      } else if (items.length > 1 && e.key === "ArrowRight") {
         e.preventDefault();
         onChangeIndex((activeIndex! + 1) % items.length);
       }
     };
-    window.addEventListener("keydown", handleArrows);
-    return () => window.removeEventListener("keydown", handleArrows);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [isOpen, activeIndex, items.length, onChangeIndex]);
 
   return (
     <dialog
       ref={dialogRef}
+      data-lightbox="true"
       {...({ closedby: "any" } as Record<string, string>)}
       aria-labelledby={titleId}
       className="lightbox-dialog"

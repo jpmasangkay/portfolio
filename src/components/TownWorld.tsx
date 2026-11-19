@@ -347,14 +347,14 @@ const TownWorld = ({
         renderer.dispose();
       });
     scene.background = new THREE.Color(0x161932);
-    scene.fog = new THREE.Fog(0x161932, 34, 68);
+    scene.fog = new THREE.Fog(0x161932, 54, 112);
 
     // ====== CAMERA (isometric with portrait scaling & opening sweep) ======
     const frustum = computeOrthoFrustum(window.innerWidth, window.innerHeight, 12);
     const camera = new THREE.OrthographicCamera(
       frustum.left, frustum.right,
       frustum.top, frustum.bottom,
-      0.1, 100
+      0.1, 150
     );
     const prefersReducedMotion =
       typeof window !== "undefined" &&
@@ -382,95 +382,107 @@ const TownWorld = ({
     const pathMat = new THREE.MeshLambertMaterial({ color: 0x8a7a68 });
     const waterMat = new THREE.MeshLambertMaterial({ color: 0x3366cc, transparent: true, opacity: 0.7 });
 
-    // ====== GROUND (multi-layered + outer horizon meadow + outskirt zones) ======
+    // ====== GROUND (seamless horizon terrain + blended biome floors) ======
     const outerMeadow = new THREE.Mesh(
-      new THREE.BoxGeometry(200, 0.4, 200),
-      new THREE.MeshLambertMaterial({ color: 0x22301e })
+      new THREE.BoxGeometry(240, 0.5, 240),
+      new THREE.MeshLambertMaterial({ color: 0x293e27 })
     );
-    outerMeadow.position.y = -0.58;
+    outerMeadow.position.y = -0.28;
     outerMeadow.receiveShadow = true;
     scene.add(outerMeadow);
 
     // Base dark earth terrace
     const groundBase = new THREE.Mesh(
-      new THREE.BoxGeometry(54, 0.3, 54),
-      new THREE.MeshLambertMaterial({ color: 0x2a3c23 })
+      new THREE.BoxGeometry(110, 0.45, 110),
+      new THREE.MeshLambertMaterial({ color: 0x2c4228 })
     );
-    groundBase.position.y = -0.35;
+    groundBase.position.y = -0.25;
     groundBase.receiveShadow = true;
     scene.add(groundBase);
-    // Main grass layer
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(50, 0.5, 50), groundMat);
-    ground.position.y = -0.25;
+    // Main town courtyard grass layer
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(40, 0.48, 38), groundMat);
+    ground.position.set(0, -0.24, 1);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Zone 1 Ground: Whispering Forest (West)
+    // Zone 1 Ground: Whispering Forest (West — wide seamless canopy floor)
     const forestFloor = new THREE.Mesh(
-      new THREE.BoxGeometry(24, 0.4, 62),
-      new THREE.MeshLambertMaterial({ color: 0x263f2a })
+      new THREE.BoxGeometry(64, 0.46, 96),
+      new THREE.MeshLambertMaterial({ color: 0x27402a })
     );
-    forestFloor.position.set(-26, -0.22, -6);
+    forestFloor.position.set(-50, -0.235, -4);
     forestFloor.receiveShadow = true;
     scene.add(forestFloor);
 
-    // Zone 2 Ground: Moonlit Lakeside Shore (East)
+    // Zone 2 Ground: Moonlit Lakeside Shore (East — wide seamless shore floor)
     const shoreFloor = new THREE.Mesh(
-      new THREE.BoxGeometry(24, 0.4, 62),
-      new THREE.MeshLambertMaterial({ color: 0x334d34 })
+      new THREE.BoxGeometry(64, 0.46, 96),
+      new THREE.MeshLambertMaterial({ color: 0x314a32 })
     );
-    shoreFloor.position.set(26, -0.22, -6);
+    shoreFloor.position.set(50, -0.235, -4);
     shoreFloor.receiveShadow = true;
     scene.add(shoreFloor);
 
-    // Zone 3 Ground: Ruined Hilltop Stepped Ramp + Plateau (North)
-    const hillMat = new THREE.MeshLambertMaterial({ color: 0x454952 });
+    // Zone 3 Ground: Ruined Hilltop Stepped Staircase + Rocky Cliff Face + Mossy Plateau (North)
+    const hillMat = new THREE.MeshLambertMaterial({ color: 0x585c6e });
+    const cliffFaceMat = new THREE.MeshLambertMaterial({ color: 0x4b4f60 });
     for (let stepIdx = 0; stepIdx < 4; stepIdx++) {
       const stepY = (stepIdx + 1) * 0.15;
-      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.16, 1.05), hillMat);
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.18, 1.08), hillMat);
       stepMesh.position.set(0, stepY - 0.08, -19 - stepIdx);
       stepMesh.receiveShadow = true;
       scene.add(stepMesh);
+      // Flanking stepped stone staircase balustrades
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.38, stepY + 0.32, 1.08), cliffFaceMat);
+        rail.position.set(side * 2.38, (stepY + 0.32) / 2 - 0.05, -19 - stepIdx);
+        rail.castShadow = true;
+        scene.add(rail);
+      }
     }
-    const hilltopPlateau = new THREE.Mesh(
-      new THREE.BoxGeometry(26, 0.8, 14),
-      new THREE.MeshLambertMaterial({ color: 0x344234 })
+    // Rocky stone cliff base so the northern plateau clearly reads as an elevated 3D cliff
+    const hilltopCliffBase = new THREE.Mesh(
+      new THREE.BoxGeometry(26.4, 0.72, 14.4),
+      cliffFaceMat
     );
-    hilltopPlateau.position.set(0, 0.2, -29.5);
+    hilltopCliffBase.position.set(0, 0.24, -29.5);
+    hilltopCliffBase.castShadow = true;
+    hilltopCliffBase.receiveShadow = true;
+    scene.add(hilltopCliffBase);
+    // Vertical stone cliff buttresses along the front cliff face (z = -22.25)
+    for (const bx of [-11.5, -8.5, -5.5, 5.5, 8.5, 11.5]) {
+      const buttress = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.78, 0.65), hillMat);
+      buttress.position.set(bx, 0.27, -22.25);
+      buttress.castShadow = true;
+      scene.add(buttress);
+    }
+    // Grassy plateau top layer
+    const hilltopPlateau = new THREE.Mesh(
+      new THREE.BoxGeometry(25.6, 0.12, 13.6),
+      new THREE.MeshLambertMaterial({ color: 0x354a35 })
+    );
+    hilltopPlateau.position.set(0, 0.56, -29.5);
     hilltopPlateau.receiveShadow = true;
     scene.add(hilltopPlateau);
-    // Lighter grass patches (varied terrain)
-    const lightGrassMat = new THREE.MeshLambertMaterial({ color: 0x4c653f });
+
+    // Lighter grass patches (varied terrain, avoiding roads and building footprints)
+    const lightGrassMat = new THREE.MeshLambertMaterial({ color: 0x455e3a });
     const darkGrassMat = new THREE.MeshLambertMaterial({ color: 0x2f4126 });
-    for (let i = 0; i < 25; i++) {
-      const gx = (Math.random() - 0.5) * 40;
-      const gz = (Math.random() - 0.5) * 40;
-      // Skip if on path
-      if (Math.abs(gx) < 2.5 && gz > -14 && gz < 18) continue;
-      if (Math.abs(gz) < 2.5 && gx > -14 && gx < 14) continue;
-      const size = 1.5 + Math.random() * 3;
+    for (let i = 0; i < 18; i++) {
+      const gx = (Math.random() - 0.5) * 32;
+      const gz = (Math.random() - 0.5) * 28;
+      if (Math.abs(gx) < 4.5 && gz > -15 && gz < 18) continue;
+      if (Math.abs(gz) < 4.5 && gx > -16 && gx < 16) continue;
+      if (gx > 6 && gz > -12 && gz < 5) continue;
+      const size = 1.4 + Math.random() * 2.2;
       const patch = new THREE.Mesh(
-        new THREE.BoxGeometry(size, 0.02, size * (0.7 + Math.random() * 0.6)),
-        i % 3 === 0 ? darkGrassMat : lightGrassMat
+        new THREE.BoxGeometry(size, 0.015, size * (0.7 + Math.random() * 0.5)),
+        i % 2 === 0 ? darkGrassMat : lightGrassMat
       );
-      patch.position.set(gx, 0.01, gz);
+      patch.position.set(gx, 0.008, gz);
       patch.rotation.y = Math.random() * Math.PI;
       scene.add(patch);
     }
-    // Dirt patches around buildings
-    const dirtMat = new THREE.MeshLambertMaterial({ color: 0x5a4a35 });
-    const addDirtPatch = (x: number, z: number, s: number = 1) => {
-      const dirt = new THREE.Mesh(new THREE.BoxGeometry(2 * s, 0.02, 1.5 * s), dirtMat);
-      dirt.position.set(x, 0.01, z);
-      dirt.rotation.y = Math.random() * Math.PI;
-      scene.add(dirt);
-    };
-    addDirtPatch(-8, 11, 1.5); // tavern front
-    addDirtPatch(-9, -4, 1.2); // forge front
-    addDirtPatch(10, 1, 1);    // gallery front
-    addDirtPatch(0, 16, 2);    // gate area
-    addDirtPatch(3, -10, 1);   // wizard area
-    addDirtPatch(9, 9, 0.8);   // notice board
 
     setSplashProgress(0.3);
     await yieldTask();
@@ -537,24 +549,29 @@ const TownWorld = ({
         }
       }
     };
-    // Main north-south road
-    addCobblePath(0, 3, 3, 30);
-    // Approaching road beyond south gate & north wall so roads fade into the surrounding realm
+    // Main north-south avenue from South Gate approach (z=22) up to Wizard's Tower front plaza (z=-7.6)
+    addCobblePath(0, 7.2, 3, 29.6);
+    // North Gate stone walkway behind Wizard's Tower connecting to the Hilltop stairs (z=-18.5..-12.5)
+    addCobblePath(0, -15.5, 3, 6.2);
+    // Approaching road beyond south gate
     const outerRoadMat = new THREE.MeshLambertMaterial({ color: 0x625648 });
-    const southRoadExt = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 22), outerRoadMat);
-    southRoadExt.position.set(0, -0.36, 29);
+    const southRoadExt = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 18), outerRoadMat);
+    southRoadExt.position.set(0, -0.02, 31);
     southRoadExt.receiveShadow = true;
     scene.add(southRoadExt);
-    const northRoadExt = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 20), outerRoadMat);
-    northRoadExt.position.set(0, -0.36, -26);
-    northRoadExt.receiveShadow = true;
-    scene.add(northRoadExt);
-    // East-west crossroad
-    addCobblePath(0, 0, 25, 3);
+    // West Gate road to Town Center & Gallery entrance (x=-18 to x=6.2, stops cleanly at Gallery front)
+    addCobblePath(-5.9, 0, 24.2, 3);
+    // East Gate avenue (from East side of Gallery x=11.8 to East Gate x=18)
+    addCobblePath(14.9, 0, 6.2, 3);
+    // Southern promenade around The Gallery connecting Center road to East Gate avenue
+    addCobblePath(8.8, 3.2, 11.2, 2.2);
+    addCobblePath(13.3, 1.6, 2.2, 2.2);
     // Branch to tavern
     addCobblePath(-4.75, 8, 6.5, 3);
     // Branch to noticeboard
     addCobblePath(4.75, 8, 6.5, 3);
+    // Branch to Town Exit (from East Gate avenue north to Exit front door at z=-8.8)
+    addCobblePath(10, -8.2, 2.6, 1.8);
 
     // Extra loose road cobbles
     for (let i = 0; i < 30; i++) {
@@ -823,13 +840,44 @@ const TownWorld = ({
         group.add(body);
       }
 
-      // Roof (pyramid)
-      const roofGeo = new THREE.ConeGeometry(Math.max(b.w, b.d) * 0.78, b.roofH, 4);
-      const roof = new THREE.Mesh(roofGeo, roofMaterial);
-      roof.position.y = b.h + b.roofH / 2;
-      roof.rotation.y = Math.PI / 4;
-      roof.castShadow = true;
-      group.add(roof);
+      // Roof: Open Town Gate uses a crenellated stone battlement deck between the flanking guard towers;
+      // other buildings use a proportionally scaled pyramid roof with finial crest
+      if (isOpenGate) {
+        const deck = new THREE.Mesh(
+          new THREE.BoxGeometry(b.w + 0.3, 0.2, b.d + 0.3),
+          new THREE.MeshLambertMaterial({ color: 0x585068 })
+        );
+        deck.position.y = b.h + 0.1;
+        deck.castShadow = true;
+        group.add(deck);
+        for (const mz of [-b.d / 2 - 0.02, b.d / 2 + 0.02]) {
+          for (const mx of [-1.8, -0.9, 0, 0.9, 1.8]) {
+            const merlon = new THREE.Mesh(
+              new THREE.BoxGeometry(0.46, 0.44, 0.28),
+              wallMat
+            );
+            merlon.position.set(mx, b.h + 0.42, mz);
+            merlon.castShadow = true;
+            group.add(merlon);
+          }
+        }
+      } else {
+        const maxSpan = Math.max(b.w, b.d);
+        const roofGeo = new THREE.ConeGeometry(maxSpan * 0.72, b.roofH, 4);
+        const roof = new THREE.Mesh(roofGeo, roofMaterial);
+        roof.position.y = b.h + b.roofH / 2;
+        roof.rotation.y = Math.PI / 4;
+        roof.scale.set(b.w / maxSpan, 1, b.d / maxSpan);
+        roof.castShadow = true;
+        group.add(roof);
+
+        const finial = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.28, 0.2),
+          new THREE.MeshLambertMaterial({ color: 0xc89a3e })
+        );
+        finial.position.y = b.h + b.roofH + 0.08;
+        group.add(finial);
+      }
 
       // Windows (emissive yellow blocks)
       if (b.hasWindows) {
@@ -1522,36 +1570,81 @@ const TownWorld = ({
     addBirch(16, -8, 2.5);
     addOak(-8, 14, 3);
 
-    // Outer perimeter forest silhouettes (outside walkable zones to frame the horizon)
+    // Outer perimeter forest silhouettes & stepped cliff ridges (outside walkable zones to frame every screen edge)
     const outerTreeSpots: [number, number, "oak" | "pine", number][] = [
-      [-23, 24, "pine", 4.2], [-18, 26, "oak", 3.4], [-12, 24, "pine", 3.8], [-6, 25, "pine", 4.0],
-      [6, 25, "oak", 3.6], [13, 24, "pine", 4.2], [20, 22, "oak", 3.5], [24, 16, "pine", 4.4],
-      [-24, -18, "oak", 3.5], [-18, -24, "pine", 4.4], [18, -23, "oak", 3.8], [24, -17, "pine", 4.0],
-      [-39, 15, "pine", 4.8], [-39, 2, "oak", 4.0], [-38, -10, "pine", 4.6], [41, -14, "pine", 4.5],
-      [41, 10, "oak", 3.8], [-15, 31, "pine", 4.5], [14, 30, "oak", 3.8], [-18, -36, "pine", 4.6],
-      [0, -39, "oak", 4.2], [17, -36, "pine", 4.4],
+      // South horizon
+      [-32, 24, "pine", 4.6], [-26, 25, "oak", 3.8], [-23, 24, "pine", 4.2], [-18, 26, "oak", 3.4],
+      [-12, 24, "pine", 3.8], [-6, 25, "pine", 4.0], [6, 25, "oak", 3.6], [13, 24, "pine", 4.2],
+      [20, 22, "oak", 3.5], [24, 16, "pine", 4.4], [30, 23, "pine", 4.5], [-15, 31, "pine", 4.5],
+      [14, 30, "oak", 3.8], [-28, 30, "pine", 4.8], [26, 29, "oak", 4.0],
+      // North & North-West / North-East horizon (frames top-left & top-right of isometric view)
+      [-24, -18, "oak", 3.5], [-18, -24, "pine", 4.4], [-28, -20, "pine", 4.6], [-34, -17, "oak", 3.9],
+      [-37, -23, "pine", 4.9], [-31, -27, "oak", 4.1], [-24, -30, "pine", 4.7], [-18, -36, "pine", 4.6],
+      [-14, -29, "pine", 4.3], [14, -28, "pine", 4.2], [18, -23, "oak", 3.8], [24, -17, "pine", 4.0],
+      [28, -22, "pine", 4.5], [34, -18, "oak", 3.9], [0, -39, "oak", 4.2], [17, -36, "pine", 4.4],
+      [-8, -38, "pine", 4.7], [9, -38, "pine", 4.5],
+      // West Whispering Forest outer border (dense double-row treeline so top-left never looks empty)
+      [-37, 17, "pine", 4.8], [-39, 12, "oak", 4.1], [-37, 7, "pine", 4.7], [-39, 2, "oak", 4.0],
+      [-37, -3, "pine", 4.6], [-39, -8, "oak", 4.2], [-38, -13, "pine", 4.8], [-42, 15, "oak", 4.3],
+      [-43, 8, "pine", 5.0], [-42, 0, "pine", 4.8], [-43, -7, "oak", 4.2], [-42, -15, "pine", 4.9],
+      [-45, -21, "pine", 5.1], [-35, 20, "pine", 4.5],
+      // East Moonlit Lakeside outer border
+      [39, -15, "pine", 4.6], [41, -9, "oak", 3.9], [40, -2, "pine", 4.7], [41, 5, "oak", 4.0],
+      [39, 12, "pine", 4.5], [37, 18, "oak", 3.8], [44, -6, "pine", 4.9], [44, 4, "pine", 4.8],
     ];
     outerTreeSpots.forEach(([ox, oz, kind, oh]) => {
       if (kind === "oak") {
         const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.6, oh, 0.6), treeTrunkMat);
-        trunk.position.set(ox, oh / 2 - 0.38, oz);
+        trunk.position.set(ox, oh / 2, oz);
+        trunk.castShadow = true;
         scene.add(trunk);
-        const canopy = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.8, 2.3), treeLeafMat);
-        canopy.position.set(ox, oh + 0.6 - 0.38, oz);
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 2.4), treeLeafMat);
+        canopy.position.set(ox, oh + 0.6, oz);
+        canopy.castShadow = true;
         scene.add(canopy);
+        const topCap = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 1.5), treeLeafMat2);
+        topCap.position.set(ox, oh + 1.5, oz);
+        scene.add(topCap);
       } else {
         const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.35, oh, 0.35), treeTrunkMat);
-        trunk.position.set(ox, oh / 2 - 0.38, oz);
+        trunk.position.set(ox, oh / 2, oz);
+        trunk.castShadow = true;
         scene.add(trunk);
-        const tier1 = new THREE.Mesh(new THREE.ConeGeometry(1.3, 1.5, 4), treeLeafMat);
-        tier1.position.set(ox, oh * 0.55 - 0.38, oz);
+        const tier1 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.6, 4), treeLeafMat);
+        tier1.position.set(ox, oh * 0.55, oz);
         tier1.rotation.y = Math.PI / 4;
+        tier1.castShadow = true;
         scene.add(tier1);
-        const tier2 = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.3, 4), treeLeafMat2);
-        tier2.position.set(ox, oh * 0.9 - 0.38, oz);
+        const tier2 = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.4, 4), treeLeafMat2);
+        tier2.position.set(ox, oh * 0.9, oz);
         tier2.rotation.y = Math.PI / 4;
         scene.add(tier2);
       }
+    });
+
+    // Stepped voxel cliff ridges & mossy boulders framing the outer northwest, west, and northeast horizon
+    const cliffRockMat = new THREE.MeshLambertMaterial({ color: 0x464a57 });
+    const cliffCapMat = new THREE.MeshLambertMaterial({ color: 0x2f4d2f });
+    const outerCliffRidges: [number, number, number, number, number][] = [
+      [-40, -18, 6, 1.8, 5],
+      [-34, -23, 7, 2.2, 5],
+      [-26, -26, 8, 1.9, 5],
+      [-41, -4, 4.5, 1.5, 8],
+      [-41, 10, 4.5, 1.6, 8],
+      [33, -23, 7, 2.0, 5],
+      [25, -26, 7, 1.8, 5],
+      [0, -37.5, 18, 2.1, 4],
+    ];
+    outerCliffRidges.forEach(([cx, cz, cw, ch, cd]) => {
+      const rock = new THREE.Mesh(new THREE.BoxGeometry(cw, ch, cd), cliffRockMat);
+      rock.position.set(cx, ch / 2 - 0.05, cz);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      scene.add(rock);
+      const moss = new THREE.Mesh(new THREE.BoxGeometry(cw + 0.2, 0.18, cd + 0.2), cliffCapMat);
+      moss.position.set(cx, ch, cz);
+      moss.receiveShadow = true;
+      scene.add(moss);
     });
 
     // Barrels near tavern
@@ -1608,27 +1701,9 @@ const TownWorld = ({
       scene.add(sup);
     }
 
-    // Fence posts along edges (instanced, skipping open road gates)
-    const fencePositions: [number, number][] = [];
-    for (let i = -18; i <= 18; i += 3) {
-      if (Math.abs(i) >= 3) {
-        fencePositions.push([-20, i], [20, i], [i, -18], [i, 20]);
-      }
-    }
-    const fenceInstMesh = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.2, 1.5, 0.2),
-      fenceMat,
-      fencePositions.length
-    );
-    fencePositions.forEach(([fx, fz], idx) => {
-      dummy.position.set(fx, 0.75, fz);
-      dummy.rotation.set(0, 0, 0);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      fenceInstMesh.setMatrixAt(idx, dummy.matrix);
-    });
-    fenceInstMesh.instanceMatrix.needsUpdate = true;
-    scene.add(fenceInstMesh);
+    // Low timber rail fences flanking the outer south gate approach road
+    addFence(-6.0, 19.3, -2.3, 19.3, 4);
+    addFence(2.3, 19.3, 6.0, 19.3, 4);
 
     // ====== LANTERN POSTS along paths (shared geometries/materials, bright emissive glass, single shared plaza light) ======
     const torchLights: { light: THREE.PointLight; baseIntensity: number }[] = [];
@@ -1656,75 +1731,204 @@ const TownWorld = ({
       scene.add(lanternRoof);
     };
 
-    // Lanterns along main road
+    // Lanterns along main road & gates
     addLanternPost(-2, 6);
     addLanternPost(2, 6);
     addLanternPost(-2, 0);
     addLanternPost(2, 0);
     addLanternPost(-2, -6);
     addLanternPost(2, -6);
-    // Lanterns along east-west road
     addLanternPost(6, -2);
     addLanternPost(-6, -2);
     addLanternPost(6, 2);
     addLanternPost(-6, 2);
+    addLanternPost(-15.8, -2.3);
+    addLanternPost(15.8, -2.3);
+    addLanternPost(-2.3, -14.2);
+    addLanternPost(-2.3, 19.8);
+    addLanternPost(2.3, 19.8);
 
     setSplashProgress(0.58);
     await yieldTask();
     if (disposed) return;
 
-    // ====== STONE WALLS around town perimeter ======
+    // ====== STONE WALLS, CORNER BASTIONS & GATE PILLARS ======
     const wallMat2 = new THREE.MeshLambertMaterial({ color: 0x5a5565 });
-    const addWallSegment = (x: number, z: number, w: number, d: number, h: number = 1.5) => {
+    const wallTrimMat = new THREE.MeshLambertMaterial({ color: 0x474352 });
+    const bastionRoofMat = new THREE.MeshLambertMaterial({ color: 0x4e425e });
+    const gateTimberMat = new THREE.MeshLambertMaterial({ color: 0x4d3422 });
+
+    const addWallSegment = (x: number, z: number, w: number, d: number, h: number = 1.55) => {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat2);
       wall.position.set(x, h / 2, z);
       wall.castShadow = true;
       wall.receiveShadow = true;
       scene.add(wall);
+      const coping = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, 0.14, d + 0.12), wallTrimMat);
+      coping.position.set(x, h + 0.04, z);
+      scene.add(coping);
       addCollider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, "wall");
     };
-    // North wall
+    // North wall (open gate gap at x in [-2.1, 2.1])
     for (let i = -16; i <= 16; i += 4) {
-      if (Math.abs(i) < 3) continue; // gap for road
-      addWallSegment(i, -16, 4, 0.8);
+      if (Math.abs(i) < 3) continue;
+      addWallSegment(i, -16, 4, 0.85);
     }
-    // South wall
+    addWallSegment(-2.6, -16, 1.3, 1.3, 2.7);
+    addWallSegment(2.6, -16, 1.3, 1.3, 2.7);
+    // South wall (open gate gap at x in [-2.1, 2.1], with foregate barbican wing walls connecting to Town Gate towers at z=14)
     for (let i = -16; i <= 16; i += 4) {
-      if (Math.abs(i) < 3) continue; // gate gap
-      addWallSegment(i, 18, 4, 0.8);
+      if (Math.abs(i) < 3) continue;
+      addWallSegment(i, 18, 4, 0.85);
     }
-    // East wall (open gate gap at z in [-2, 2])
-    for (const z of [-14, -10, -6, 6, 10, 14]) {
-      addWallSegment(18, z, 0.8, 4);
+    addWallSegment(-3.5, 16.0, 0.85, 3.2, 2.4);
+    addWallSegment(3.5, 16.0, 0.85, 3.2, 2.4);
+    // East wall (open gate gap at z in [-2, 2], extended to z=16.5 so SW/SE corners seal cleanly into corner bastions)
+    for (const z of [-14, -10, -6, 6, 10, 14, 16.5]) {
+      addWallSegment(18, z, 0.85, z === 16.5 ? 2.2 : 4);
     }
-    addWallSegment(18, -2.8, 1.1, 1.4, 2.5);
-    addWallSegment(18, 2.8, 1.1, 1.4, 2.5);
-    // West wall (open gate gap at z in [-2, 2])
-    for (const z of [-14, -10, -6, 6, 10, 14]) {
-      addWallSegment(-18, z, 0.8, 4);
+    addWallSegment(18, -2.8, 1.3, 1.3, 2.7);
+    addWallSegment(18, 2.8, 1.3, 1.3, 2.7);
+    // West wall (open gate gap at z in [-2, 2], extended to z=16.5 so SW/SE corners seal cleanly into corner bastions)
+    for (const z of [-14, -10, -6, 6, 10, 14, 16.5]) {
+      addWallSegment(-18, z, 0.85, z === 16.5 ? 2.2 : 4);
     }
-    addWallSegment(-18, -2.8, 1.1, 1.4, 2.5);
-    addWallSegment(-18, 2.8, 1.1, 1.4, 2.5);
-    // Wall merlon / battlement details (instanced)
-    const merlonPositions: [number, number][] = [];
+    addWallSegment(-18, -2.8, 1.3, 1.3, 2.7);
+    addWallSegment(-18, 2.8, 1.3, 1.3, 2.7);
+
+    // Open-sky medieval stone gate pillar caps & torches at West Gate (-18,±2.8), East Gate (18,±2.8), and North Gate (±2.6,-16)
+    const gatePillarTops: [number, number][] = [
+      [-18, -2.8],
+      [-18, 2.8],
+      [18, -2.8],
+      [18, 2.8],
+      [-2.6, -16],
+      [2.6, -16],
+    ];
+    gatePillarTops.forEach(([px, pz]) => {
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.05, 4), bastionRoofMat);
+      cap.position.set(px, 3.3, pz);
+      cap.rotation.y = Math.PI / 4;
+      cap.castShadow = true;
+      scene.add(cap);
+      const torch = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.2), lanternGlassMat);
+      torch.position.set(px, 2.15, pz);
+      scene.add(torch);
+    });
+
+    // 4 Corner Bastion Watchtowers at (-18,-16), (18,-16), (-18,18), (18,18)
+    const cornerBastions: [number, number][] = [
+      [-18, -16],
+      [18, -16],
+      [-18, 18],
+      [18, 18],
+    ];
+    cornerBastions.forEach(([bx, bz]) => {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(2.1, 3.4, 2.1), wallMat2);
+      tower.position.set(bx, 1.7, bz);
+      tower.castShadow = true;
+      tower.receiveShadow = true;
+      scene.add(tower);
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.35, 2.35), wallTrimMat);
+      collar.position.set(bx, 3.4, bz);
+      scene.add(collar);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(1.85, 1.7, 4), bastionRoofMat);
+      roof.position.set(bx, 4.4, bz);
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      scene.add(roof);
+      const slit = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.45, 2.18), lanternGlassMat);
+      slit.position.set(bx, 2.45, bz);
+      scene.add(slit);
+      addCollider(bx - 1.1, bx + 1.1, bz - 1.1, bz + 1.1, "corner-bastion");
+    });
+
+    // Wall merlon / battlement details along ALL FOUR walls (North, South, East, West)
+    const merlonPositions: [number, number, boolean][] = [];
     for (let i = -16; i <= 16; i += 2) {
       if (Math.abs(i) < 3) continue;
-      merlonPositions.push([i, -16], [i, 18]);
+      merlonPositions.push([i, -16, false], [i, 18, false]);
+    }
+    for (let z = -14; z <= 16; z += 2) {
+      if (Math.abs(z) < 3) continue;
+      merlonPositions.push([-18, z, true], [18, z, true]);
     }
     const merlonInst = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(0.6, 0.5, 0.9),
+      new THREE.BoxGeometry(0.62, 0.45, 0.62),
       wallMat2,
       merlonPositions.length
     );
-    merlonPositions.forEach(([mx, mz], idx) => {
-      dummy.position.set(mx, 1.75, mz);
-      dummy.rotation.set(0, 0, 0);
+    merlonPositions.forEach(([mx, mz, rot], idx) => {
+      dummy.position.set(mx, 1.88, mz);
+      dummy.rotation.set(0, rot ? Math.PI / 2 : 0, 0);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
       merlonInst.setMatrixAt(idx, dummy.matrix);
     });
     merlonInst.instanceMatrix.needsUpdate = true;
     scene.add(merlonInst);
+
+    // North-West Adventurer Training & Smithing Courtyard (fills bare NW corner at x=-12.5, z=-11)
+    const nwPad = new THREE.Mesh(
+      new THREE.BoxGeometry(5.2, 0.06, 4.2),
+      new THREE.MeshLambertMaterial({ color: 0x5c5349 })
+    );
+    nwPad.position.set(-12.5, 0.03, -11.0);
+    nwPad.receiveShadow = true;
+    scene.add(nwPad);
+    // Stepping stones connecting NW training yard down to the Forge & West Road
+    for (let sIdx = 0; sIdx < 5; sIdx++) {
+      const st = new THREE.Mesh(
+        new THREE.BoxGeometry(0.75, 0.05, 0.55),
+        new THREE.MeshLambertMaterial({ color: sIdx % 2 === 0 ? 0x7a6e60 : 0x695e52 })
+      );
+      st.position.set(-12.5 + (sIdx % 2 === 0 ? -0.18 : 0.18), 0.038, -8.5 + sIdx * 0.95);
+      st.receiveShadow = true;
+      scene.add(st);
+    }
+    // Glowing coal brazier warming the NW training courtyard
+    const brazierBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.38, 0.3, 0.58, 7),
+      wallTrimMat
+    );
+    brazierBase.position.set(-10.1, 0.29, -9.3);
+    brazierBase.castShadow = true;
+    scene.add(brazierBase);
+    const brazierEmbers = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.2, 0.42),
+      new THREE.MeshBasicMaterial({ color: 0xff7722 })
+    );
+    brazierEmbers.position.set(-10.1, 0.62, -9.3);
+    scene.add(brazierEmbers);
+    addCollider(-10.55, -9.65, -9.75, -8.85, "nw-brazier");
+    for (const dx of [-13.8, -11.2]) {
+      const dPost = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.35, 0.18), gateTimberMat);
+      dPost.position.set(dx, 0.68, -11.2);
+      scene.add(dPost);
+      const dBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.26, 0.24, 0.65, 6),
+        new THREE.MeshLambertMaterial({ color: 0xc29b58 })
+      );
+      dBody.position.set(dx, 0.95, -11.2);
+      dBody.castShadow = true;
+      scene.add(dBody);
+      const dArms = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.12, 0.12), gateTimberMat);
+      dArms.position.set(dx, 1.05, -11.2);
+      scene.add(dArms);
+      const dHead = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.28, 0.28),
+        new THREE.MeshLambertMaterial({ color: 0xd4b272 })
+      );
+      dHead.position.set(dx, 1.48, -11.2);
+      scene.add(dHead);
+      addCollider(dx - 0.4, dx + 0.4, -11.6, -10.8, "training-dummy");
+    }
+    // Weapon rack beside NW training pad
+    const rackFrame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 0.35), gateTimberMat);
+    rackFrame.position.set(-12.5, 0.55, -13.0);
+    rackFrame.castShadow = true;
+    scene.add(rackFrame);
+    addCollider(-13.4, -11.6, -13.3, -12.7, "weapon-rack");
 
     // ====== MARKET STALL (near town square) ======
     const stallWoodMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
@@ -2036,28 +2240,39 @@ const TownWorld = ({
     innerCircle.position.set(0, 0.05, -10);
     scene.add(innerCircle);
 
-    // -- GATE: Guard tower extension, flag, torches --
-    // Gate tower posts
+    // -- GATE: Guard tower extension, steep spire roofs, flag, torches --
     for (let side = -1; side <= 1; side += 2) {
       const tower = new THREE.Mesh(
-        new THREE.BoxGeometry(1.2, 7, 1.2),
+        new THREE.BoxGeometry(1.35, 6.6, 1.35),
         new THREE.MeshLambertMaterial({ color: 0x6a6078 })
       );
-      tower.position.set(side * 3.5, 3.5, 14);
+      tower.position.set(side * 3.5, 3.3, 14);
       tower.castShadow = true;
       scene.add(tower);
-      // Tower top battlement
-      const battlement = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 1.5), new THREE.MeshLambertMaterial({ color: 0x6a6078 }));
-      battlement.position.set(side * 3.5, 7.25, 14);
+      // Tower top battlement collar
+      const battlement = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.4, 1.6),
+        new THREE.MeshLambertMaterial({ color: 0x564d63 })
+      );
+      battlement.position.set(side * 3.5, 6.7, 14);
       scene.add(battlement);
+      // Steep medieval spire roof on each guard tower
+      const spire = new THREE.Mesh(
+        new THREE.ConeGeometry(1.3, 1.8, 4),
+        new THREE.MeshLambertMaterial({ color: 0x6a5545 })
+      );
+      spire.position.set(side * 3.5, 7.8, 14);
+      spire.rotation.y = Math.PI / 4;
+      spire.castShadow = true;
+      scene.add(spire);
     }
-    // Flag on right tower
-    const flagPole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2, 0.06), new THREE.MeshLambertMaterial({ color: 0x4a3020 }));
-    flagPole.position.set(3.5, 8.5, 14);
+    // Flag on right tower peak
+    const flagPole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.6, 0.06), new THREE.MeshLambertMaterial({ color: 0x4a3020 }));
+    flagPole.position.set(3.5, 9.1, 14);
     scene.add(flagPole);
     const flagMat = new THREE.MeshLambertMaterial({ color: 0xcc2244, side: THREE.DoubleSide });
-    const flag = new THREE.Mesh(new THREE.BoxGeometry(1, 0.6, 0.02), flagMat);
-    flag.position.set(4.1, 9.2, 14);
+    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.55, 0.02), flagMat);
+    flag.position.set(4.0, 9.6, 14);
     scene.add(flag);
 
     // ====== CAMPFIRE (near town center) ======
@@ -2542,65 +2757,212 @@ const TownWorld = ({
     if (disposed) return;
 
     // ====== OUTSKIRTS ZONES (Forest, Lakeside, Ruined Hilltop) ======
-    // 1. Whispering Forest (West)
-    const forestTrailMat = new THREE.MeshLambertMaterial({ color: 0x5c4a38 });
-    const westTrail1 = new THREE.Mesh(new THREE.BoxGeometry(9, 0.06, 2.8), forestTrailMat);
-    westTrail1.position.set(-22.5, 0.02, 0);
+    // 1. Whispering Forest (West) — layered woodland trail, timber curbs, stepping stones & standing-stone glade
+    const forestTrailMat = new THREE.MeshLambertMaterial({ color: 0x4d3e30 });
+    const trailStoneMat1 = new THREE.MeshLambertMaterial({ color: 0x766b5d });
+    const trailStoneMat2 = new THREE.MeshLambertMaterial({ color: 0x645a4d });
+    const trailCurbMat = new THREE.MeshLambertMaterial({ color: 0x3f2b1b });
+
+    // Layered non-z-fighting earthen trail beds with beveled corner transition
+    const westTrail1 = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.04, 2.5), forestTrailMat);
+    westTrail1.position.set(-22.3, 0.015, 0);
     westTrail1.receiveShadow = true;
     scene.add(westTrail1);
-    const westTrail2 = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 9), forestTrailMat);
-    westTrail2.position.set(-26.5, 0.02, 4.5);
+    const westTrailTurn = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.85, 0.045, 10), forestTrailMat);
+    westTrailTurn.position.set(-26.3, 0.018, 0.4);
+    westTrailTurn.receiveShadow = true;
+    scene.add(westTrailTurn);
+    const westTrail2 = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.042, 7.6), forestTrailMat);
+    westTrail2.position.set(-26.5, 0.02, 4.3);
     westTrail2.receiveShadow = true;
     scene.add(westTrail2);
-    // Hidden clearing meadow ring
-    const clearingPatch = new THREE.Mesh(
-      new THREE.CylinderGeometry(4.6, 4.8, 0.05, 16),
-      new THREE.MeshLambertMaterial({ color: 0x3b6334 })
+
+    // Timber log border curbs along the forest trail
+    const trailLogs: [number, number, number, number][] = [
+      [-21.8, -1.35, 6.8, 0],
+      [-21.5, 1.35, 6.2, 0],
+      [-25.15, 4.2, 5.8, Math.PI / 2],
+      [-27.85, 3.8, 6.4, Math.PI / 2],
+    ];
+    trailLogs.forEach(([lx, lz, len, rotY]) => {
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.18), trailCurbMat);
+      curb.position.set(lx, 0.07, lz);
+      curb.rotation.y = rotY;
+      curb.castShadow = true;
+      scene.add(curb);
+    });
+
+    // Staggered voxel stepping stones along the forest trail
+    const forestSteppingStones: [number, number, number, number][] = [
+      [-18.8, -0.25, 0.75, 0.55], [-19.7, 0.3, 0.65, 0.5], [-20.7, -0.15, 0.8, 0.6],
+      [-21.8, 0.25, 0.7, 0.55], [-22.9, -0.2, 0.75, 0.55], [-24.0, 0.2, 0.7, 0.5],
+      [-25.1, -0.1, 0.75, 0.6], [-26.1, 0.2, 0.8, 0.65], [-26.6, 1.2, 0.65, 0.75],
+      [-26.2, 2.2, 0.6, 0.7], [-26.7, 3.3, 0.7, 0.75], [-26.3, 4.4, 0.65, 0.7],
+      [-26.8, 5.5, 0.7, 0.75], [-26.4, 6.6, 0.65, 0.65], [-27.1, 7.5, 0.75, 0.65],
+    ];
+    forestSteppingStones.forEach(([sx, sz, sw, sd], idx) => {
+      const st = new THREE.Mesh(
+        new THREE.BoxGeometry(sw, 0.055, sd),
+        idx % 2 === 0 ? trailStoneMat1 : trailStoneMat2
+      );
+      st.position.set(sx, 0.042, sz);
+      st.rotation.y = ((idx % 3) - 1) * 0.14;
+      st.receiveShadow = true;
+      scene.add(st);
+    });
+
+    // Multi-tiered mossy glade ring at (-28, 9) — elevated above trail to prevent z-fighting
+    const clearingOuter = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.8, 5.1, 0.05, 16),
+      new THREE.MeshLambertMaterial({ color: 0x32572e })
     );
-    clearingPatch.position.set(-28, 0.02, 9);
-    clearingPatch.receiveShadow = true;
-    scene.add(clearingPatch);
+    clearingOuter.position.set(-28, 0.026, 9);
+    clearingOuter.receiveShadow = true;
+    scene.add(clearingOuter);
+    const clearingInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.4, 3.6, 0.055, 14),
+      new THREE.MeshLambertMaterial({ color: 0x3e6b37 })
+    );
+    clearingInner.position.set(-28, 0.035, 9);
+    clearingInner.receiveShadow = true;
+    scene.add(clearingInner);
+
+    // Ancient Standing-Stone Ring & glowing cyan runestones around the clearing edge
+    const standingStoneMat = new THREE.MeshLambertMaterial({ color: 0x585c6a });
+    const runeGlowMat = new THREE.MeshBasicMaterial({ color: 0x5ae2ff });
+    const standingStoneAngles = [0.4, 1.35, 2.2, 3.1, 4.05, 5.65];
+    standingStoneAngles.forEach((ang, idx) => {
+      const rx = -28 + Math.cos(ang) * 4.35;
+      const rz = 9 + Math.sin(ang) * 4.35;
+      const sh = 1.15 + (idx % 3) * 0.35;
+      const monolith = new THREE.Mesh(new THREE.BoxGeometry(0.55, sh, 0.42), standingStoneMat);
+      monolith.position.set(rx, sh / 2, rz);
+      monolith.rotation.y = -ang + Math.PI / 2;
+      monolith.castShadow = true;
+      scene.add(monolith);
+      const rune = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, 0.45), runeGlowMat);
+      rune.position.set(rx, sh * 0.58, rz);
+      rune.rotation.y = -ang + Math.PI / 2;
+      scene.add(rune);
+    });
+
+    // Fallen mossy log beside the forest trail
+    const fallenLog = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.3, 2.8, 7),
+      trailCurbMat
+    );
+    fallenLog.position.set(-23.2, 0.24, -3.2);
+    fallenLog.rotation.z = Math.PI / 2;
+    fallenLog.rotation.y = 0.35;
+    fallenLog.castShadow = true;
+    scene.add(fallenLog);
+
     // Forest trees framing the trail & clearing (leaving trails walkable)
     const forestTrees: [number, number, "oak" | "pine", number][] = [
       [-21, -8, "pine", 4.0], [-26, -11, "oak", 3.4], [-32, -8, "pine", 4.3],
       [-33, -1, "oak", 3.5], [-34, 6, "pine", 4.4], [-33, 13, "oak", 3.6],
       [-26, 15, "pine", 4.1], [-21, 13, "oak", 3.2], [-22, 6, "pine", 3.6],
-      [-31, -4, "pine", 3.8],
+      [-31, -4, "pine", 3.8], [-29, -14, "pine", 4.2], [-35, -13, "oak", 3.8],
+      [-35, 16, "pine", 4.4], [-23, 17, "pine", 3.9],
     ];
     forestTrees.forEach(([tx, tz, kind, th]) => {
       if (kind === "oak") addOak(tx, tz, th);
       else addPine(tx, tz, th);
     });
+    // Forest undergrowth bushes
+    addBush(-20.5, -3.2, 1.1);
+    addBush(-24.5, -2.5, 0.9);
+    addBush(-29.2, 2.2, 1.0);
+    addBush(-23.5, 9.8, 1.1);
+    addBush(-31.8, 10.5, 0.95);
     // Clearing lantern & mushroom ring
     addLanternPost(-24.5, 8.2);
     addMushroom(-29.5, 7.5, 1.1);
     addMushroom(-30.0, 9.8, 0.9);
     addMushroom(-27.2, 11.4, 1.0);
+    addMushroom(-26.1, 10.6, 0.75);
+    addMushroom(-29.0, 11.1, 0.85);
 
     setSplashProgress(0.69);
     await yieldTask();
     if (disposed) return;
 
-    // 2. Moonlit Lakeside (East)
-    const eastTrail = new THREE.Mesh(new THREE.BoxGeometry(10, 0.06, 2.8), forestTrailMat);
-    eastTrail.position.set(22.5, 0.02, 0);
+    // 2. Moonlit Lakeside (East) — stone-bordered shore path, dock railings & rocky shoreline
+    const eastTrail = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.04, 2.5), forestTrailMat);
+    eastTrail.position.set(22.2, 0.015, 0);
     eastTrail.receiveShadow = true;
     scene.add(eastTrail);
-    // Lake water & dark lakebed
+    for (let i = 0; i < 7; i++) {
+      const st = new THREE.Mesh(
+        new THREE.BoxGeometry(0.75, 0.055, 0.6),
+        i % 2 === 0 ? trailStoneMat1 : trailStoneMat2
+      );
+      st.position.set(18.8 + i * 1.1, 0.042, (i % 2 === 0 ? 1 : -1) * 0.25);
+      st.rotation.y = (i % 3 - 1) * 0.12;
+      st.receiveShadow = true;
+      scene.add(st);
+    }
+    // Shoreline bank terrace & boulders
+    const shoreBank = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 0.14, 24.5),
+      new THREE.MeshLambertMaterial({ color: 0x4f483d })
+    );
+    shoreBank.position.set(27.1, 0.04, 0);
+    shoreBank.receiveShadow = true;
+    scene.add(shoreBank);
+    addRockCluster(26.5, -6.5);
+    addRockCluster(26.6, 6.8);
+    // Lake water & dark lakebed with natural rocky cove borders
     const lakeBed = new THREE.Mesh(
-      new THREE.BoxGeometry(12, 0.12, 24),
+      new THREE.BoxGeometry(12.4, 0.12, 24.4),
       new THREE.MeshLambertMaterial({ color: 0x162436 })
     );
     lakeBed.position.set(33, -0.02, 0);
     scene.add(lakeBed);
-    const lakeWater = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.18, 23), waterMat);
+    const lakeWater = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.18, 23.2), waterMat);
     lakeWater.position.set(33, 0.06, 0);
     scene.add(lakeWater);
+    // Rocky headland coves framing the north, south, and far east lake edges so water never looks like a bare box
+    const coveRockMat = new THREE.MeshLambertMaterial({ color: 0x525663 });
+    const lakeCoveRocks: [number, number, number, number, number][] = [
+      [29.5, -11.8, 3.8, 0.55, 1.8],
+      [34.2, -12.0, 4.6, 0.75, 2.0],
+      [29.5, 11.8, 3.8, 0.55, 1.8],
+      [34.2, 12.0, 4.6, 0.72, 2.0],
+      [38.8, -7.5, 1.8, 0.85, 6.5],
+      [39.0, 0, 1.6, 0.65, 7.5],
+      [38.8, 7.5, 1.8, 0.85, 6.5],
+    ];
+    lakeCoveRocks.forEach(([rx, rz, rw, rh, rd]) => {
+      const rock = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, rd), coveRockMat);
+      rock.position.set(rx, rh / 2 - 0.02, rz);
+      rock.castShadow = true;
+      scene.add(rock);
+    });
+    // Lily pads & night-blooming lotus blossoms on the lake
+    const lakeLilyPositions: [number, number, boolean][] = [
+      [29.2, -4.5, true], [30.1, -5.2, false], [31.5, -7.8, true],
+      [29.4, 5.4, true], [30.5, 6.2, false], [32.4, 4.8, true],
+      [34.5, -2.5, false], [35.2, 2.8, true],
+    ];
+    lakeLilyPositions.forEach(([lx, lz, hasBloom]) => {
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.025, 7), lilyMat);
+      pad.position.set(lx, 0.16, lz);
+      scene.add(pad);
+      if (hasBloom) {
+        const bloom = new THREE.Mesh(
+          new THREE.BoxGeometry(0.11, 0.09, 0.11),
+          new THREE.MeshBasicMaterial({ color: 0xff99bb })
+        );
+        bloom.position.set(lx, 0.21, lz);
+        scene.add(bloom);
+      }
+    });
     // Lake water colliders (leaving wooden pier x in [25.5, 31.5], z in [-1.4, 1.4] walkable)
     addCollider(27.2, 39, -12.5, -1.5, "lake-north");
     addCollider(27.2, 39, 1.5, 12.5, "lake-south");
     addCollider(31.6, 39, -1.5, 1.5, "lake-deep");
-    // Lakeside wooden dock / pier
+    // Lakeside wooden dock / pier with side rope bollards & cargo crate
     const lakeDockDeck = new THREE.Mesh(
       new THREE.BoxGeometry(6.2, 0.16, 2.4),
       new THREE.MeshLambertMaterial({ color: 0x624024 })
@@ -2611,14 +2973,15 @@ const TownWorld = ({
     for (const px of [26.2, 28.5, 30.8]) {
       for (const pz of [-1.0, 1.0]) {
         const post = new THREE.Mesh(
-          new THREE.BoxGeometry(0.16, 0.6, 0.16),
+          new THREE.BoxGeometry(0.18, 0.72, 0.18),
           new THREE.MeshLambertMaterial({ color: 0x452b16 })
         );
-        post.position.set(px, 0.18, pz);
+        post.position.set(px, 0.24, pz);
         scene.add(post);
       }
     }
     addLanternPost(26.0, -1.7);
+    addBench(25.2, 3.2, -Math.PI / 2);
     // Moored rowboat on the lakeside
     const lakeBoatGroup = new THREE.Group();
     const lBoatHull = new THREE.Mesh(
@@ -2645,13 +3008,18 @@ const TownWorld = ({
     if (disposed) return;
 
     // 3. Ruined Hilltop (North)
-    // Trail leading north from (0, -16) onto plateau
-    const northHillTrail = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 6), forestTrailMat);
-    northHillTrail.position.set(0, 0.03, -17);
-    scene.add(northHillTrail);
-    // Crumbled stone pillars & ruin archways on hilltop (y base = 0.6)
+    // Weathered stone flagstones on the hilltop plateau leading from top of stairs (z=-23) to the Ancient Altar (z=-31)
     const ruinStoneMat = new THREE.MeshLambertMaterial({ color: 0x656478 });
     const ruinMossMat = new THREE.MeshLambertMaterial({ color: 0x3b633c });
+    for (let fz = -23.5; fz >= -29.8; fz -= 1.25) {
+      const flagstone = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8 + (Math.abs(Math.round(fz)) % 2) * 0.4, 0.05, 0.85),
+        ruinStoneMat
+      );
+      flagstone.position.set(((Math.round(fz * 2) % 3) - 1) * 0.15, 0.625, fz);
+      flagstone.receiveShadow = true;
+      scene.add(flagstone);
+    }
     const addRuinPillar = (rx: number, rz: number, rh: number) => {
       const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, rh, 0.9), ruinStoneMat);
       pillar.position.set(rx, 0.6 + rh / 2, rz);
@@ -2672,11 +3040,17 @@ const TownWorld = ({
     ruinLintel.position.set(-4.5, 0.6 + 2.8, -28.5);
     ruinLintel.rotation.x = 0.16;
     scene.add(ruinLintel);
-    // Ancient altar stone
+    // Ancient altar stone with glowing arcane rune inlay
     const altar = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 1.2), ruinStoneMat);
     altar.position.set(0, 0.6 + 0.425, -31.0);
     altar.castShadow = true;
     scene.add(altar);
+    const altarRune = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 0.06, 0.6),
+      new THREE.MeshBasicMaterial({ color: 0x5ae2ff })
+    );
+    altarRune.position.set(0, 0.6 + 0.86, -31.0);
+    scene.add(altarRune);
     addCollider(-1.1, 1.1, -31.7, -30.3, "ruin-altar");
     // Hilltop Campfire (at 3.2, 0.6, -26.8)
     const hillCampfireGroup = new THREE.Group();
@@ -3118,6 +3492,29 @@ const TownWorld = ({
     );
     barCounter.position.set(2.2, 0.55, 69.8);
     tavernRoomGroup.add(barCounter);
+    // Back-bar shelving & ale casks behind the counter
+    const backShelf = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 2.2, 0.45),
+      new THREE.MeshLambertMaterial({ color: 0x4a2e1b })
+    );
+    backShelf.position.set(2.2, 1.3, 68.55);
+    tavernRoomGroup.add(backShelf);
+    for (let bi = 0; bi < 5; bi++) {
+      const bottle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.34, 0.18),
+        new THREE.MeshBasicMaterial({ color: [0x55dd88, 0xffaa33, 0xe05555, 0x66bbff, 0xf4c855][bi] })
+      );
+      bottle.position.set(1.1 + bi * 0.55, 1.65, 68.75);
+      tavernRoomGroup.add(bottle);
+    }
+    // Guest table & tankards on the east side of the tavern room
+    const guestTable = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, 0.78, 1.2),
+      new THREE.MeshLambertMaterial({ color: 0x6b4426 })
+    );
+    guestTable.position.set(2.8, 0.39, 73.0);
+    tavernRoomGroup.add(guestTable);
+    tavernInteriorColliders.push({ minX: 1.9, maxX: 3.7, minZ: 72.3, maxZ: 73.7, label: "tavern-table" });
     tavernInteriorColliders.push({ minX: 0.4, maxX: 4.0, minZ: 69.2, maxZ: 70.4, label: "tavern-bar" });
 
     const dossierDesk = new THREE.Mesh(
@@ -3132,14 +3529,26 @@ const TownWorld = ({
     );
     dossierBook.position.set(-2.0, 0.96, 70.1);
     tavernRoomGroup.add(dossierBook);
+    const deskCandle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.26, 0.14),
+      new THREE.MeshBasicMaterial({ color: 0xffe082 })
+    );
+    deskCandle.position.set(-2.65, 1.03, 69.85);
+    tavernRoomGroup.add(deskCandle);
     tavernInteriorColliders.push({ minX: -3.0, maxX: -1.0, minZ: 69.5, maxZ: 70.7, label: "tavern-desk" });
 
     const tavernHearth = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 2.4, 0.8),
+      new THREE.BoxGeometry(1.4, 2.6, 1.1),
       new THREE.MeshLambertMaterial({ color: 0x4a4552 })
     );
-    tavernHearth.position.set(-4.1, 1.2, 72.2);
+    tavernHearth.position.set(-4.1, 1.3, 72.2);
     tavernRoomGroup.add(tavernHearth);
+    const hearthChimney = new THREE.Mesh(
+      new THREE.BoxGeometry(0.95, 1.6, 0.8),
+      new THREE.MeshLambertMaterial({ color: 0x3d3944 })
+    );
+    hearthChimney.position.set(-4.2, 3.3, 72.2);
+    tavernRoomGroup.add(hearthChimney);
     const hearthEmbers = new THREE.Mesh(
       new THREE.BoxGeometry(0.7, 0.4, 0.5),
       new THREE.MeshBasicMaterial({ color: 0xff7722 })
@@ -3156,6 +3565,12 @@ const TownWorld = ({
     );
     orbPedestal.position.set(32, 0.55, 70.2);
     wizardRoomGroup.add(orbPedestal);
+    const orbRuneFloor = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.55, 0.04, 12),
+      new THREE.MeshBasicMaterial({ color: 0x7744cc })
+    );
+    orbRuneFloor.position.set(32, 0.025, 70.2);
+    wizardRoomGroup.add(orbRuneFloor);
     const interiorScryOrb = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.45, 0),
       new THREE.MeshBasicMaterial({ color: 0xbb77ff })
@@ -3170,12 +3585,29 @@ const TownWorld = ({
     );
     bookshelf.position.set(34.6, 1.2, 68.7);
     wizardRoomGroup.add(bookshelf);
-    const tomeAccent = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.35, 0.2),
-      new THREE.MeshBasicMaterial({ color: 0x5ae2ff })
+    // Colorful arcane tome spines on the Wizard's bookshelf
+    for (let ti = 0; ti < 6; ti++) {
+      const spine = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.42, 0.22),
+        new THREE.MeshBasicMaterial({ color: [0x5ae2ff, 0xf4c855, 0xff66aa, 0x62f59a, 0xbb77ff, 0xff8844][ti] })
+      );
+      spine.position.set(33.6 + ti * 0.38, 1.5 + (ti % 2) * 0.48, 69.08);
+      wizardRoomGroup.add(spine);
+    }
+    // Alchemist workbench on the west wall of the Wizard's study
+    const alchemyTable = new THREE.Mesh(
+      new THREE.BoxGeometry(1.3, 0.88, 2.2),
+      new THREE.MeshLambertMaterial({ color: 0x4b3526 })
     );
-    tomeAccent.position.set(34.6, 1.5, 69.1);
-    wizardRoomGroup.add(tomeAccent);
+    alchemyTable.position.set(28.6, 0.44, 71.2);
+    wizardRoomGroup.add(alchemyTable);
+    const alchemyFlask = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.36, 0.24),
+      new THREE.MeshBasicMaterial({ color: 0x55eeaa })
+    );
+    alchemyFlask.position.set(28.7, 1.04, 70.8);
+    wizardRoomGroup.add(alchemyFlask);
+    wizardInteriorColliders.push({ minX: 27.9, maxX: 29.4, minZ: 70.0, maxZ: 72.4, label: "wizard-alchemy" });
     wizardInteriorColliders.push({ minX: 33.2, maxX: 36.0, minZ: 68.4, maxZ: 69.4, label: "wizard-bookshelf" });
 
     // ====== GENTLE ATMOSPHERIC RAIN (lightweight single Points pass) ======
@@ -3265,24 +3697,34 @@ const TownWorld = ({
     });
     scene.add(new THREE.Points(particleGeo, particleMat));
 
-    // ====== STARS ======
-    const starCount = 200;
+    // ====== MOONLIT WOODLAND & RUINS MOTE PARTICLES (ground-level, never projects as sky stars over terrain) ======
+    const starCount = 72;
     const starGeo = new THREE.BufferGeometry();
     const sPositions = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI * 0.35;
-      const r = 35;
-      sPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      sPositions[i * 3 + 1] = r * Math.cos(phi);
-      sPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      if (i < 28) {
+        // Whispering Forest glade & trail cyan-emerald motes
+        sPositions[i * 3] = -26 + (Math.random() - 0.5) * 16;
+        sPositions[i * 3 + 1] = 0.7 + Math.random() * 2.6;
+        sPositions[i * 3 + 2] = 4 + (Math.random() - 0.5) * 18;
+      } else if (i < 50) {
+        // Moonlit Lakeside shimmer motes
+        sPositions[i * 3] = 27 + (Math.random() - 0.5) * 14;
+        sPositions[i * 3 + 1] = 0.6 + Math.random() * 2.4;
+        sPositions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+      } else {
+        // Ruined Hilltop arcane motes
+        sPositions[i * 3] = (Math.random() - 0.5) * 18;
+        sPositions[i * 3 + 1] = 1.1 + Math.random() * 2.8;
+        sPositions[i * 3 + 2] = -28 + (Math.random() - 0.5) * 10;
+      }
     }
     starGeo.setAttribute("position", new THREE.BufferAttribute(sPositions, 3));
     const starMat = new THREE.PointsMaterial({
-      color: 0xffffff,
+      color: 0x9ee8ff,
       size: 0.2,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.45,
       depthWrite: false,
     });
     scene.add(new THREE.Points(starGeo, starMat));

@@ -60,6 +60,7 @@ const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       if (dialog?.open && typeof dialog.close === "function") {
+        dialog.returnValue = "";
         dialog.close();
       }
       if (prevFocus && typeof prevFocus.focus === "function" && prevFocus.isConnected) {
@@ -73,6 +74,12 @@ const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps
     const dialog = dialogRef.current;
     if (!dialog) return;
 
+    const handleNativeClose = () => {
+      dialog.returnValue = "";
+    };
+    dialog.addEventListener("close", handleNativeClose);
+
+    // Fallback light-dismiss for browsers without native dialog closedby support
     let pressedOutside = false;
     const isOutside = (e: PointerEvent) => {
       const r = dialog.getBoundingClientRect();
@@ -85,10 +92,13 @@ const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      pressedOutside = isOutside(e);
+      if (!("closedBy" in HTMLDialogElement.prototype)) {
+        pressedOutside = isOutside(e);
+      }
     };
     const onPointerUp = (e: PointerEvent) => {
       if (
+        !("closedBy" in HTMLDialogElement.prototype) &&
         pressedOutside &&
         isOutside(e) &&
         !document.querySelector("dialog[data-lightbox='true'][open]")
@@ -101,6 +111,7 @@ const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps
     dialog.addEventListener("pointerdown", onPointerDown);
     dialog.addEventListener("pointerup", onPointerUp);
     return () => {
+      dialog.removeEventListener("close", handleNativeClose);
       dialog.removeEventListener("pointerdown", onPointerDown);
       dialog.removeEventListener("pointerup", onPointerUp);
     };
@@ -123,8 +134,21 @@ const ScrollModal = ({ open, onClose, title, emoji, children }: ScrollModalProps
         }
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
+        if (
+          e.target === e.currentTarget &&
+          !document.querySelector("dialog[data-lightbox='true'][open]")
+        ) {
+          const r = e.currentTarget.getBoundingClientRect();
+          const hasLayoutBox = r.width > 0 && r.height > 0;
+          const clickedInsideBox =
+            hasLayoutBox &&
+            e.clientX >= r.left &&
+            e.clientX <= r.right &&
+            e.clientY >= r.top &&
+            e.clientY <= r.bottom;
+          if (!clickedInsideBox) {
+            onClose();
+          }
         }
       }}
       style={{

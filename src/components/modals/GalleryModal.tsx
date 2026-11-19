@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { galleryMagazines, galleryPosters } from "@/data/media-works";
 import ImageLightbox, { type LightboxImage } from "@/components/ImageLightbox";
+import MediaThumbnail from "@/components/MediaThumbnail";
 
 const modalText: React.CSSProperties = {
   fontFamily: "'MedievalSharp', serif",
@@ -44,9 +45,10 @@ const GalleryModal = () => {
             type="button"
             onClick={() => setLightboxIdx(i)}
             aria-label={`Inspect ${work.title}`}
+            className="gallery-frame-btn"
             style={{
               background: "hsla(250, 15%, 12%, 0.65)",
-              border: "2px solid hsl(250, 15%, 22%)",
+              border: "1px solid hsl(250, 15%, 24%)",
               overflow: "hidden",
               padding: 0,
               textAlign: "left",
@@ -54,12 +56,7 @@ const GalleryModal = () => {
             }}
           >
             <div style={{ padding: 6, background: "hsla(250, 12%, 10%, 0.5)" }}>
-              <img
-                src={work.image}
-                alt={work.title}
-                style={{ width: "100%", height: "auto", display: "block", imageRendering: "auto" }}
-                loading="lazy"
-              />
+              <MediaThumbnail src={work.image} alt={work.title} aspectHint="3 / 4" />
             </div>
             <div style={{ padding: "8px 10px" }}>
               <p
@@ -101,9 +98,10 @@ const GalleryModal = () => {
             type="button"
             onClick={() => setLightboxIdx(galleryPosters.length + i)}
             aria-label={`Inspect ${mag.title}`}
+            className="gallery-frame-btn"
             style={{
               background: "hsla(250, 15%, 12%, 0.65)",
-              border: "2px solid hsl(250, 15%, 22%)",
+              border: "1px solid hsl(250, 15%, 24%)",
               overflow: "hidden",
               padding: 0,
               textAlign: "left",
@@ -111,12 +109,7 @@ const GalleryModal = () => {
             }}
           >
             <div style={{ padding: 6, background: "hsla(250, 12%, 10%, 0.5)" }}>
-              <img
-                src={mag.image}
-                alt={mag.title}
-                style={{ width: "100%", height: "auto", display: "block" }}
-                loading="lazy"
-              />
+              <MediaThumbnail src={mag.image} alt={mag.title} aspectHint="16 / 10" />
             </div>
             <div style={{ padding: "6px 10px" }}>
               <p style={{ ...modalText, fontSize: 12, opacity: 0.72 }}>{mag.title} 🔍</p>
@@ -130,6 +123,22 @@ const GalleryModal = () => {
         activeIndex={lightboxIdx}
         onChangeIndex={setLightboxIdx}
       />
+      <style>{`
+        .gallery-frame-btn {
+          transition: border-color 0.15s ease, transform 0.12s ease;
+        }
+        .gallery-frame-btn:hover,
+        .gallery-frame-btn:focus-visible {
+          border-color: hsl(38, 85%, 55%) !important;
+        }
+        .gallery-frame-btn:active {
+          transform: scale(0.985);
+        }
+        .gallery-frame-btn:focus-visible {
+          outline: 2px solid hsl(38, 85%, 55%);
+          outline-offset: 2px;
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import TownOverlay from "./TownOverlay";
 import QuickViewPortfolio from "./QuickViewPortfolio";
@@ -159,5 +159,42 @@ describe("TownOverlay and QuickViewPortfolio", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Back to 3D Realm/i }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters repositories by tag and search query, handles empty states, and copies email with live announcement in QuickViewPortfolio", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    const printSpy = vi.fn();
+    window.print = printSpy;
+
+    render(<QuickViewPortfolio onBackToWorld={vi.fn()} />);
+
+    // Featured projects include source links and production badge
+    expect(screen.getByText(/Production · Institutional System/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /View Source on GitHub/i }).length).toBeGreaterThanOrEqual(3);
+
+    // Filter repositories by Kotlin tag
+    fireEvent.click(screen.getByRole("button", { name: "Kotlin" }));
+    expect(screen.getByText(/app-calculator/i)).toBeInTheDocument();
+    expect(screen.queryByText(/umbra/i)).not.toBeInTheDocument();
+
+    // Search for a non-existent repo to trigger empty state, then reset
+    const searchInput = screen.getByLabelText(/Search repositories/i);
+    fireEvent.change(searchInput, { target: { value: "nonexistent-xyz" } });
+    expect(screen.getByText(/No repositories match the current filter/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reset Filters/i }));
+    expect(screen.getByText(/umbra/i)).toBeInTheDocument();
+
+    // Copy email and verify live region feedback
+    fireEvent.click(screen.getByRole("button", { name: /Copy email address/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("shealtieljohnpaulmasangkay@gmail.com");
+      expect(screen.getByRole("status")).toHaveTextContent(/Copied/i);
+    });
+
+    // Print / Save PDF
+    fireEvent.click(screen.getByRole("button", { name: /Print \/ Save PDF/i }));
+    expect(printSpy).toHaveBeenCalledTimes(1);
   });
 });

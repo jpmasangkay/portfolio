@@ -90,6 +90,41 @@ function loadBooleanFlag(key: string): boolean {
   }
 }
 
+function loadInitialQuickView(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "quick" || params.get("mode") === "resume") {
+      return true;
+    }
+    if (window.location.hash.startsWith("#qv-")) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function syncQuickViewUrl(enabled: boolean): void {
+  try {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (enabled) {
+      url.searchParams.set("view", "quick");
+    } else {
+      url.searchParams.delete("view");
+      url.searchParams.delete("mode");
+      if (url.hash.startsWith("#qv-")) {
+        url.hash = "";
+      }
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // Ignore history API errors in restricted contexts
+  }
+}
+
 const modalConfig: Record<
   Exclude<BuildingId, "wizard">,
   { title: string; emoji: string; component: React.LazyExoticComponent<React.FC> }
@@ -139,7 +174,7 @@ const Index = () => {
   });
   const [discoveryToast, setDiscoveryToast] = useState<string | null>(null);
   const [playerPos, setPlayerPos] = useState<{ x: number; z: number }>({ x: 0, z: 8.0 });
-  const [quickView, setQuickView] = useState(false);
+  const [quickView, setQuickView] = useState<boolean>(() => loadInitialQuickView());
   const [audioMuted, setAudioMutedState] = useState<boolean>(() => isAudioMuted());
   const zoneTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -319,6 +354,13 @@ const Index = () => {
       splash.remove();
     }, 320);
   }, []);
+
+  useEffect(() => {
+    syncQuickViewUrl(quickView);
+    if (quickView) {
+      dismissBootSplash();
+    }
+  }, [quickView, dismissBootSplash]);
 
   const anyModalOpen = activeModal !== null || activeVillager !== null || questLogOpen;
   const currentStdModal =

@@ -23,6 +23,8 @@ const valueStyle: React.CSSProperties = {
 };
 
 const TavernModal = () => {
+  const resumeHref = `${import.meta.env.BASE_URL}${personalInfo.resumePdf}`;
+
   return (
     <div>
       {/* Intro */}
@@ -36,7 +38,7 @@ const TavernModal = () => {
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
-          marginBottom: 24,
+          marginBottom: 16,
         }}
       >
         <div>
@@ -62,6 +64,27 @@ const TavernModal = () => {
             </a>
           </p>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <a
+          href={resumeHref}
+          download={personalInfo.resumePdf}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 14px",
+            background: "hsla(150, 35%, 14%, 0.45)",
+            border: "1px solid hsla(150, 45%, 42%, 0.65)",
+            color: "hsl(150, 55%, 65%)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 12,
+            textDecoration: "none",
+          }}
+        >
+          ⬇ Download 1-Page Resume (PDF)
+        </a>
       </div>
 
       {/* Divider */}
@@ -95,21 +118,33 @@ const TavernModal = () => {
         <div
           key={i}
           style={{
-            marginBottom: 12,
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            gap: 6,
+            marginBottom: 14,
+            paddingBottom: 10,
+            borderBottom: "1px solid hsla(250, 15%, 22%, 0.6)",
           }}
         >
-          <div>
-            <p style={{ ...modalText, color: "hsl(40, 25%, 85%)" }}>{edu.degree}</p>
-            <p style={{ ...modalText, fontSize: 12, opacity: 0.6 }}>{edu.school}</p>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 6,
+            }}
+          >
+            <div>
+              <p style={{ ...modalText, color: "hsl(40, 25%, 88%)", fontWeight: 600 }}>{edu.degree}</p>
+              <p style={{ ...modalText, fontSize: 12, opacity: 0.68 }}>{edu.school}</p>
+            </div>
+            <p style={{ ...modalText, fontSize: 11, color: "hsl(150, 40%, 45%)", whiteSpace: "nowrap" }}>
+              {edu.years}
+            </p>
           </div>
-          <p style={{ ...modalText, fontSize: 11, color: "hsl(150, 40%, 45%)", whiteSpace: "nowrap" }}>
-            {edu.years}
-          </p>
+          {edu.details && (
+            <p style={{ ...modalText, fontSize: 12.5, opacity: 0.8, marginTop: 6 }}>
+              {edu.details}
+            </p>
+          )}
         </div>
       ))}
     </div>
