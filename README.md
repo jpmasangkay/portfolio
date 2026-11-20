@@ -1,9 +1,5 @@
 # Shealtiel's Realm — Interactive 3D Voxel Portfolio
 
-**Live Demo:** <!-- TODO: Replace with live deployment URL --> https://jpmasangkay.github.io/portfolio/ *(or Vercel root URL)*
-
-![Shealtiel's Realm 3D Voxel Town](./public/og-preview.png)
-
 An interactive D&D-inspired 3D isometric voxel portfolio for **Shealtiel John Paul A. Masangkay**, built with React, TypeScript, and Three.js, alongside a keyboard-accessible recruiter **Quick View** mode.
 
 ## Features
